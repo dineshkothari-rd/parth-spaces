@@ -38,7 +38,7 @@
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
-    "test": "tsx --test src/features/customer/customerNotices.test.ts src/features/customers/customerLifecycle.test.ts src/features/customers/customerUtils.test.ts src/features/customers/roomUtils.test.ts src/features/operations/operationsMath.test.ts",
+    "test": "tsx --test src/features/customer/customerNotices.test.ts src/features/customers/customerLifecycle.test.ts src/features/customers/customerUtils.test.ts src/features/customers/roomUtils.test.ts src/features/operations/operationsMath.test.ts src/features/money/financeMath.test.ts src/shared/types/permissions.test.ts",
     "test:rules": "npx firebase-tools@14 emulators:exec --only firestore \"node --test firestore.rules.test.mjs\"",
     "web": "expo start --web"
   },

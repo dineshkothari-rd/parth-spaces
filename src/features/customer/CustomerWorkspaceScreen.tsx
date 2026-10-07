@@ -1,3 +1,4 @@
+import { Image, Linking } from 'react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { addDoc, collection, doc, onSnapshot, query, serverTimestamp, where, writeBatch } from 'firebase/firestore';
@@ -7,6 +8,7 @@ import { radius, shadow, spacing, typography, useAppTheme, type AppColors } from
 import { auth, db } from '../../lib/firebase/client';
 import { TextField } from '../../shared/components/TextField';
 import { useLanguage } from '../../shared/i18n/LanguageProvider';
+import { useBusinessSettings } from '../settings/BusinessSettingsProvider';
 import type { CustomerProfile } from '../../shared/types/admin';
 import type { InvoiceRecord, MeterReadingRecord, NoticeRecord, PaymentRecord, SettlementRecord, SupportRequestRecord, TenantRecord } from '../../shared/types/records';
 import { money } from '../../shared/utils/money';
@@ -31,6 +33,7 @@ type CustomerData = {
 };
 
 export function CustomerWorkspaceScreen({ onSignOut, profile }: { onSignOut: () => void; profile: CustomerProfile }) {
+  const { settings } = useBusinessSettings();
   const { colors } = useAppTheme();
   const { t } = useLanguage();
   const styles = createStyles(colors);
@@ -63,7 +66,7 @@ export function CustomerWorkspaceScreen({ onSignOut, profile }: { onSignOut: () 
     try {
       await downloadPdf({
         fileName: `kothari-receipt-${payment.id}.pdf`,
-        html: buildReceiptHtml(payment, [customer], t),
+        html: buildReceiptHtml(payment, [customer], t, settings),
         title: t('Payment receipt'),
       });
     } catch (receiptError) {
@@ -114,7 +117,7 @@ export function CustomerWorkspaceScreen({ onSignOut, profile }: { onSignOut: () 
       <View style={[styles.header, { paddingTop: Math.max(insets.top + spacing.sm, spacing.lg) }]}>
         <View style={styles.brandMark}><Text style={styles.brandMarkText}>K</Text></View>
         <View style={styles.headerCopy}>
-          <Text style={styles.eyebrow}>Kothari</Text>
+          <Text style={styles.eyebrow}>{settings.name}</Text>
           <Text numberOfLines={1} style={styles.headerTitle}>{profile.name}</Text>
         </View>
         <Pressable accessibilityRole="button" onPress={onSignOut} style={styles.signOutButton}>
@@ -198,6 +201,14 @@ export function CustomerWorkspaceScreen({ onSignOut, profile }: { onSignOut: () 
                 </View>
               </>
             ) : null}
+
+            {settings.upiId ? <View style={styles.card}>
+              <Text style={styles.sectionTitle}>{t('Manual UPI collection')}</Text>
+              <Text selectable style={styles.noticeText}>{settings.upiId}</Text>
+              {settings.upiQr ? <Image source={{ uri: settings.upiQr }} resizeMode="contain" style={{ width: 220, height: 220, alignSelf: 'center' }} accessibilityLabel="Business UPI QR code" /> : null}
+              <Pressable accessibilityRole="button" style={styles.submitRequest} onPress={() => Linking.openURL(`upi://pay?pa=${encodeURIComponent(settings.upiId)}&pn=${encodeURIComponent(settings.name)}&cu=INR`).catch(() => setActionError(t('No UPI app is available on this device.')))}><Text style={styles.submitRequestText}>{t('Open UPI app')}</Text></Pressable>
+              <Text style={styles.noticeText}>{t('Share the bank transaction reference with staff. Payment status changes only after verification.')}</Text>
+            </View> : null}
 
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>{t('Notices')}</Text>

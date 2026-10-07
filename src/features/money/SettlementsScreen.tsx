@@ -1,6 +1,8 @@
+import { FilterPill } from '../customers/FilterPill';
+import { parseAmount, paymentModes, validatePaymentDetails } from './financeMath';
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
-import { collection, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { collection, doc, serverTimestamp, writeBatch, runTransaction } from 'firebase/firestore';
 
 import { radius, spacing, typography, useAppTheme, type AppColors } from '../../design/tokens';
 import { auth, db } from '../../lib/firebase/client';
@@ -21,6 +23,8 @@ export function SettlementsScreen() {
   const [busyId, setBusyId] = useState('');
   const [paymentId, setPaymentId] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMode, setPaymentMode] = useState('Cash');
+  const [reference, setReference] = useState('');
   const [error, setError] = useState('');
 
   async function markRefundPaid(settlement: SettlementRecord) {
@@ -29,9 +33,10 @@ export function SettlementsScreen() {
     setBusyId(settlement.id);
     setError('');
     try {
+      validatePaymentDetails(paymentMode, reference);
       const batch = writeBatch(db);
       batch.update(doc(db, 'settlements', settlement.id), {
-        refundStatus: 'Paid', refundedAt: serverTimestamp(), refundedBy: actorUid,
+        refundMode: paymentMode, refundReference: reference.trim(), refundStatus: 'Paid', refundedAt: serverTimestamp(), refundedBy: actorUid,
       });
       batch.set(doc(collection(db, 'auditEvents')), {
         action: 'settlement.refund_paid', actorUid, createdAt: serverTimestamp(), entityId: settlement.id, entityType: 'settlement',
@@ -68,6 +73,8 @@ export function SettlementsScreen() {
     setBusyId(settlement.id);
     setError('');
     try {
+      parseAmount(paymentAmount);
+      validatePaymentDetails(paymentMode, reference);
       const paymentRef = doc(collection(db, 'payments'));
       const batch = writeBatch(db);
       batch.set(paymentRef, {
@@ -77,6 +84,7 @@ export function SettlementsScreen() {
         createdAt: serverTimestamp(),
         createdBy: actorUid,
         month: settlement.month,
+        paymentMode, reference: reference.trim(), collectedBy: actorUid,
         note: 'Settlement balance',
         paidOn: new Date().toLocaleDateString('en-IN'),
         status: 'Recorded',
@@ -103,6 +111,7 @@ export function SettlementsScreen() {
       <Text style={styles.title}>{t('Checkout settlements')}</Text>
       <Text style={styles.subtitle}>{t('Final balances, deposits and refunds stay recorded here.')}</Text>
       {settlements.error || error ? <Text style={styles.error}>{settlements.error || error}</Text> : null}
+      <View style={styles.paymentBox}><Text style={styles.subtitle}>{t('Method and reference for the next balance payment or refund')}</Text><View style={{ flexDirection: 'row', gap: 8 }}>{paymentModes.map((mode) => <FilterPill key={mode} label={mode} active={paymentMode === mode} onPress={() => setPaymentMode(mode)} />)}</View><TextField label="Transaction reference" value={reference} onChangeText={setReference} maxLength={120} /></View>
       {settlements.data.map((settlement) => (
         <View key={settlement.id} style={styles.card}>
           <View style={styles.header}><Text style={styles.name}>{settlement.tenantName}</Text><Text style={styles.month}>{settlement.month}</Text></View>

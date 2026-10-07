@@ -44,12 +44,16 @@ import type { DueRecord, InvoiceRecord, MeterReadingRecord, PaymentRecord, Settl
 import { money, toNumber } from '../../shared/utils/money';
 import { ExpenseDesk } from './ExpenseDesk';
 import { useLanguage } from '../../shared/i18n/LanguageProvider';
+import { defaultBusinessSettings, type BusinessSettings } from '../customers/businessConfig';
+import { useBusinessSettings } from '../settings/BusinessSettingsProvider';
 
 type MoneyView = 'dues' | 'collections' | 'expenses';
 type DueStatusFilter = 'due' | 'partial' | 'pending' | 'paid' | 'all';
 type PaymentStatusFilter = 'all' | 'recorded';
 type PaymentDraft = {
   amountPaid: number;
+  paymentMode: string;
+  reference: string;
   balance: number;
   businessType: string;
   month: string;
@@ -227,6 +231,7 @@ function getDocumentFileName(title: string, customerName: string, period: string
 }
 
 function buildDocumentHtml({
+  business = defaultBusinessSettings,
   balance,
   customer,
   documentNumber,
@@ -239,6 +244,7 @@ function buildDocumentHtml({
   title,
   total,
 }: {
+  business?: BusinessSettings;
   balance: string;
   customer: string;
   documentNumber: string;
@@ -291,7 +297,8 @@ function buildDocumentHtml({
       </head>
       <body>
         <div class="header">
-          <div class="brand">Kothari</div>
+          <div class="brand">${escapeHtml(business.name)}</div>
+          <div>${escapeHtml(business.address)}</div><div>${escapeHtml(business.phone)}</div>
           <h1>${escapeHtml(title)}</h1>
           <div class="doc">${escapeHtml(documentNumber)}</div>
         </div>
@@ -341,12 +348,13 @@ function getPdfLabels(t: (text: string) => string) {
   };
 }
 
-function buildBillHtml(due: DueRecord, t: (text: string) => string) {
+function buildBillHtml(due: DueRecord, t: (text: string) => string, business = defaultBusinessSettings) {
   const type = getBusinessType(due.businessType);
   const title = getDocumentTitle(due.businessType, 'bill', t);
   const allocation = getCustomerAllocationLabel({ businessType: due.businessType, room: due.tenantRoom });
 
   return buildDocumentHtml({
+    business,
     balance: money(due.balance),
     customer: due.tenantName,
     documentNumber: `${t('Bill for')} ${due.month}`,
@@ -355,10 +363,14 @@ function buildBillHtml(due: DueRecord, t: (text: string) => string) {
     lineItems: [
       { label: t(type.feeLabel), value: money(due.baseAmount) },
       ...(due.meterAmount ? [{ label: t('Electricity'), value: money(due.meterAmount) }] : []),
+      ...(due.extraCharge ? [{ label: t('Additional charge'), value: money(due.extraCharge) }] : []),
+      ...(due.discount ? [{ label: t('Discount / credit'), value: `−${money(due.discount)}` }] : []),
     ],
     meta: [
       { label: t(type.unitLabel), value: allocation },
       { label: t('Month'), value: due.month },
+      { label: t('Due date'), value: due.dueDate || '-' },
+      ...(due.note ? [{ label: t('Note'), value: due.note }] : []),
     ],
     paid: money(due.paid),
     status: t(due.status),
@@ -367,7 +379,7 @@ function buildBillHtml(due: DueRecord, t: (text: string) => string) {
   });
 }
 
-export function buildReceiptHtml(payment: PaymentRecord, tenants: TenantRecord[], t: (text: string) => string) {
+export function buildReceiptHtml(payment: PaymentRecord, tenants: TenantRecord[], t: (text: string) => string, business = defaultBusinessSettings) {
   const businessType = getPaymentBusinessType(payment, tenants);
   const type = getBusinessType(businessType);
   const title = getDocumentTitle(businessType, 'receipt', t);
@@ -376,6 +388,7 @@ export function buildReceiptHtml(payment: PaymentRecord, tenants: TenantRecord[]
   const note = payment.note ? [{ label: t('Note'), value: String(payment.note) }] : [];
 
   return buildDocumentHtml({
+    business,
     balance: money(balance),
     customer: getPaymentTenantName(payment, tenants),
     documentNumber: `${t('Receipt no')}: ${String(payment.id || '').slice(-8).toUpperCase() || '-'}`,
@@ -386,6 +399,9 @@ export function buildReceiptHtml(payment: PaymentRecord, tenants: TenantRecord[]
       { label: t(type.unitLabel), value: allocation },
       { label: t('Month'), value: payment.month || '-' },
       { label: t('Paid on'), value: payment.paidOn || '-' },
+      { label: t('Payment method'), value: payment.paymentMode || 'Not recorded' },
+      { label: t('Reference'), value: payment.reference || '-' },
+      { label: t('Collected by'), value: payment.collectedBy || payment.createdBy as string || '-' },
       ...note,
     ],
     paid: money(getPaymentAmount(payment)),
@@ -416,6 +432,7 @@ export async function downloadPdf({ fileName, html, title }: { fileName: string;
 }
 
 export function MoneyScreen() {
+  const { settings } = useBusinessSettings();
   const { colors } = useAppTheme();
   const { t } = useLanguage();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -494,6 +511,7 @@ export function MoneyScreen() {
       batch.set(paymentRef, {
         ...payload,
         createdBy: actorUid,
+        collectedBy: actorUid,
         createdAt: serverTimestamp(),
       });
       batch.set(doc(collection(db, 'auditEvents')), {
@@ -522,7 +540,7 @@ export function MoneyScreen() {
       const actorUid = auth.currentUser?.uid;
       if (!actorUid) throw new Error(t('Please sign in again.'));
       const existing = new Set(invoices.data.filter((invoice) => invoice.month === month).map((invoice) => invoice.tenantId));
-      const missing = dues.filter((due) => !existing.has(due.tenantId));
+      const missing = dues.filter((due) => !existing.has(due.tenantId) && !tenants.data.find((tenant) => tenant.id === due.tenantId)?.membershipManaged);
       if (!missing.length) throw new Error(t('Invoices are already generated for this month.'));
       if (missing.length > 498) throw new Error(t('Generate invoices in a smaller customer batch.'));
 
@@ -531,6 +549,7 @@ export function MoneyScreen() {
         batch.set(doc(db, 'invoices', `${due.tenantId}_${month}`), {
           baseAmount: due.baseAmount,
           businessType: due.businessType,
+          dueDate: `${month}-10`,
           issuedAt: serverTimestamp(),
           issuedBy: actorUid,
           meterAmount: due.meterAmount,
@@ -617,7 +636,7 @@ export function MoneyScreen() {
       const title = getDocumentTitle(due.businessType, 'bill', t);
       await downloadPdf({
         fileName: getDocumentFileName(title, due.tenantName, due.month),
-        html: buildBillHtml(due, t),
+        html: buildBillHtml(due, t, settings),
         title,
       });
     } catch (shareError) {
@@ -633,7 +652,7 @@ export function MoneyScreen() {
       const title = getDocumentTitle(businessType, 'receipt', t);
       await downloadPdf({
         fileName: getDocumentFileName(title, getPaymentTenantName(payment, tenants.data), payment.month || payment.paidOn || ''),
-        html: buildReceiptHtml(payment, tenants.data, t),
+        html: buildReceiptHtml(payment, tenants.data, t, settings),
         title,
       });
     } catch (shareError) {
@@ -864,6 +883,8 @@ function PaymentFormSheet({
   const [paymentMonth, setPaymentMonth] = useState(month);
   const [amountPaid, setAmountPaid] = useState(initialAmount > 0 ? String(initialAmount) : '');
   const [note, setNote] = useState('');
+  const [paymentMode, setPaymentMode] = useState('Cash');
+  const [reference, setReference] = useState('');
   const [formError, setFormError] = useState('');
   const selectedTenantId = tenantId || tenants[0]?.id || '';
   const selectedTenant = tenants.find((tenant) => tenant.id === selectedTenantId);
@@ -911,7 +932,12 @@ function PaymentFormSheet({
       return;
     }
 
-    if (!paid || paid <= 0) {
+    if (paymentMode !== 'Cash' && !reference.trim()) {
+      setFormError(t('Enter the transaction reference for a bank or UPI payment.'));
+      return;
+    }
+
+    if (!paid || paid <= 0 || !Number.isFinite(Number(amountPaid)) || paid > 10_000_000 || Math.abs(paid * 100 - Math.round(paid * 100)) > 0.000001) {
       setFormError(t('Enter a valid amount paid.'));
       return;
     }
@@ -928,6 +954,8 @@ function PaymentFormSheet({
 
     onSubmit({
       amountPaid: paid,
+      paymentMode,
+      reference: reference.trim(),
       balance,
       businessType: selectedTenant.businessType || 'pg',
       month: paymentMonth.trim(),
@@ -1018,6 +1046,9 @@ function PaymentFormSheet({
               <Text style={styles.errorText}>{t('Electricity charge is not included until the meter reading is corrected.')}</Text>
             ) : null}
 
+            <View style={styles.formGrid}>{['Cash', 'UPI', 'Bank'].map((mode) => <FilterPill key={mode} label={mode} active={paymentMode === mode} onPress={() => setPaymentMode(mode)} />)}</View>
+            <TextField label="Transaction reference" value={reference} onChangeText={setReference} maxLength={120} />
+            <Text style={styles.formHelpText}>{t('Save only after verifying the payment in cash or your bank account.')}</Text>
             <TextField label="Note" onChangeText={setNote} placeholder="Optional note" value={note} />
 
             <View style={styles.sheetActions}>

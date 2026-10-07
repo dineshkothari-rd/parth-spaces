@@ -21,7 +21,7 @@ import { TextField } from '../../shared/components/TextField';
 import { useFirestoreCollection } from '../../shared/hooks/useFirestoreCollection';
 import { useRealtimeClock } from '../../shared/hooks/useRealtimeClock';
 import type { MeterReadingRecord, TenantRecord } from '../../shared/types/records';
-import { money, toNumber } from '../../shared/utils/money';
+import { money, roundMoney, toNumber } from '../../shared/utils/money';
 import { FilterPill } from '../customers/FilterPill';
 import { getCustomerAllocationLabel, getCustomerStatus } from '../customers/customerUtils';
 import { isRoomCustomer } from '../customers/roomUtils';
@@ -29,8 +29,8 @@ import { LifecycleMeterSheet, type LifecycleMeterResult } from '../customers/Lif
 import { syncAllocationGuard } from '../customers/allocationTransactions';
 import { getMeterReadingCharges, getMonthKey, isVoided, meterReadingNeedsReview } from '../operations/operationsMath';
 import { useLanguage } from '../../shared/i18n/LanguageProvider';
+import { useBusinessSettings } from '../settings/BusinessSettingsProvider';
 
-const RATE_PER_UNIT = 10;
 
 type MeterDraft = {
   billAmount: number;
@@ -73,7 +73,8 @@ function formatLocalDate(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-export function MeterScreen() {
+export function MeterScreen({ onCheckout }: { onCheckout: (customerId: string) => void }) {
+  const { settings, can } = useBusinessSettings();
   const { colors } = useAppTheme();
   const { t } = useLanguage();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -184,6 +185,10 @@ export function MeterScreen() {
   }
 
   function openLifecycle(customer: TenantRecord) {
+    if (getCustomerStatus(customer) !== 'booked') {
+      if (can('money')) onCheckout(customer.id);
+      return;
+    }
     const action = getCustomerStatus(customer) === 'booked' ? 'check-in' : 'check-out';
     setActionError('');
     setPendingLifecycle({
@@ -196,8 +201,7 @@ export function MeterScreen() {
   async function completeLifecycle(result: LifecycleMeterResult) {
     if (!pendingLifecycle) return;
 
-    const { action, customer, minimumReading } = pendingLifecycle;
-    const checkingIn = action === 'check-in';
+    const { customer, minimumReading } = pendingLifecycle;
     setSaving(true);
     setActionError('');
 
@@ -206,48 +210,35 @@ export function MeterScreen() {
       if (!actorUid) throw new Error(t('Please sign in again.'));
       const eventTime = new Date();
       const readingRef = doc(collection(db, 'meterReadings'));
-      const unitsConsumed = checkingIn ? 0 : Math.max(0, result.reading - minimumReading);
-      const tenantUpdate = checkingIn ? {
-        checkedInAt: serverTimestamp(),
-        checkInMeterReading: result.reading,
-        checkInMeterReadingId: readingRef.id,
-        moveInDate: formatLocalDate(eventTime),
-        moveInTime: eventTime.toTimeString().slice(0, 5),
-        status: 'checked in',
-        updatedAt: serverTimestamp(),
-      } : {
-        checkedOutAt: serverTimestamp(),
-        checkOutMeterReading: result.reading,
-        checkOutMeterReadingId: readingRef.id,
-        moveOutDate: formatLocalDate(eventTime),
-        moveOutTime: eventTime.toTimeString().slice(0, 5),
-        status: 'checked out',
-        updatedAt: serverTimestamp(),
+      const tenantUpdate = {
+        checkedInAt: serverTimestamp(), checkInMeterReading: result.reading, checkInMeterReadingId: readingRef.id,
+        moveInDate: formatLocalDate(eventTime), moveInTime: eventTime.toTimeString().slice(0, 5),
+        status: 'checked in', updatedAt: serverTimestamp(),
       };
-      const nextCustomer = { ...customer, ...tenantUpdate, status: checkingIn ? 'checked in' : 'checked out' } as TenantRecord;
+      const nextCustomer = { ...customer, ...tenantUpdate } as TenantRecord;
       await runTransaction(db, async (transaction) => {
         await syncAllocationGuard(transaction, customer.id, customer, nextCustomer, tenants.data);
         transaction.set(readingRef, {
-          billAmount: unitsConsumed * RATE_PER_UNIT,
+          billAmount: 0,
           createdAt: serverTimestamp(),
           currentReading: result.reading,
           month: `${eventTime.getFullYear()}-${String(eventTime.getMonth() + 1).padStart(2, '0')}`,
-          note: checkingIn ? 'Check-in meter photo' : 'Check-out meter photo',
+          note: 'Check-in meter photo',
           ocrText: result.ocrText,
           photo: result.photo,
           photoSize: result.photoSize,
           previousReading: minimumReading,
-          ratePerUnit: RATE_PER_UNIT,
+          ratePerUnit: settings.meterRate,
           readingSource: `ocr-confirmed-${result.photoSource}`,
-          readingType: action,
+          readingType: 'check-in',
           tenantId: customer.id,
           tenantName: getTenantName(customer),
           tenantRoom: customer.room || '',
-          unitsConsumed,
+          unitsConsumed: 0,
         });
         transaction.update(doc(db, 'tenants', customer.id), tenantUpdate);
         transaction.set(doc(collection(db, 'auditEvents')), {
-          action: checkingIn ? 'customer.checked_in' : 'customer.checked_out',
+          action: 'customer.checked_in',
           actorUid,
           createdAt: serverTimestamp(),
           customerId: customer.id,
@@ -316,7 +307,7 @@ export function MeterScreen() {
 
       <View style={styles.lifecyclePanel}>
         <Text style={styles.lifecycleTitle}>{t('Check-in / Check-out meter')}</Text>
-        <Text style={styles.lifecycleHelp}>{t('Take the required meter photo and complete the customer stay from here.')}</Text>
+        <Text style={styles.lifecycleHelp}>{t('Check in with a meter photo. Checkout opens the customer settlement flow.')}</Text>
         {lifecycleCustomers.length ? lifecycleCustomers.map((customer) => {
           const checkingIn = getCustomerStatus(customer) === 'booked';
           return (
@@ -325,8 +316,8 @@ export function MeterScreen() {
                 <Text style={styles.lifecycleName}>{getTenantName(customer)}</Text>
                 <Text style={styles.lifecycleMeta}>{getCustomerAllocationLabel(customer)} / {t(checkingIn ? 'Upcoming' : 'Staying')}</Text>
               </View>
-              <Pressable disabled={saving} onPress={() => openLifecycle(customer)} style={styles.lifecycleButton}>
-                <Text style={styles.lifecycleButtonText}>{t(checkingIn ? 'Check in + photo' : 'Check out + photo')}</Text>
+              <Pressable disabled={saving || (!checkingIn && !can('money'))} onPress={() => openLifecycle(customer)} style={styles.lifecycleButton}>
+                <Text style={styles.lifecycleButtonText}>{t(checkingIn ? 'Check in + photo' : 'Open checkout settlement')}</Text>
               </Pressable>
             </View>
           );
@@ -383,6 +374,7 @@ function MeterFormSheet({
   styles: ReturnType<typeof createStyles>;
   tenants: TenantRecord[];
 }) {
+  const { settings } = useBusinessSettings();
   const { t } = useLanguage();
   const [tenantId, setTenantId] = useState(tenants[0]?.id || '');
   const [month, setMonth] = useState(getMonthKey());
@@ -395,7 +387,7 @@ function MeterFormSheet({
   const current = toNumber(currentReading);
   const previous = previousReading ?? current;
   const unitsConsumed = previousReading === null ? 0 : Math.max(0, current - previous);
-  const billAmount = unitsConsumed * RATE_PER_UNIT;
+  const billAmount = roundMoney(unitsConsumed * settings.meterRate);
 
   function selectTenant(nextTenantId: string) {
     setTenantId(nextTenantId);
@@ -425,7 +417,7 @@ function MeterFormSheet({
       month: month.trim(),
       note: note.trim(),
       previousReading: previous,
-      ratePerUnit: RATE_PER_UNIT,
+      ratePerUnit: settings.meterRate,
       tenantId: selectedTenant.id,
       tenantName: getTenantName(selectedTenant),
       tenantRoom: getCustomerAllocationLabel(selectedTenant),

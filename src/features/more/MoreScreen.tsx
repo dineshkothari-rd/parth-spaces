@@ -8,11 +8,14 @@ import { SettingsScreen } from '../settings/SettingsScreen';
 import { StaffScreen } from '../staff/StaffScreen';
 import { SupportRequestsScreen } from '../support/SupportRequestsScreen';
 import { AuditScreen } from '../audit/AuditScreen';
+import { FinanceDesk } from '../money/FinanceDesk';
+import { MembershipsScreen } from '../customers/MembershipsScreen';
 import { SettlementsScreen } from '../money/SettlementsScreen';
 import { InventoryCalendarScreen } from '../customers/InventoryCalendarScreen';
 import { useLanguage } from '../../shared/i18n/LanguageProvider';
+import { useBusinessSettings } from '../settings/BusinessSettingsProvider';
 
-export type MoreView = 'audit' | 'calendar' | 'enquiries' | 'notices' | 'meter' | 'requests' | 'settings' | 'settlements' | 'team';
+export type MoreView = 'finance' | 'memberships' | 'audit' | 'calendar' | 'enquiries' | 'notices' | 'meter' | 'requests' | 'settings' | 'settlements' | 'team';
 
 const moreViews: Array<{ label: string; value: MoreView }> = [
   { label: 'Enquiries', value: 'enquiries' },
@@ -23,19 +26,31 @@ const moreViews: Array<{ label: string; value: MoreView }> = [
   { label: 'Team', value: 'team' },
   { label: 'Audit', value: 'audit' },
   { label: 'Settlements', value: 'settlements' },
+  { label: 'Money management', value: 'finance' },
+  { label: 'Memberships & agreements', value: 'memberships' },
   { label: 'Calendar', value: 'calendar' },
 ];
 
-export function MoreScreen({ isAdmin, onViewChange, view }: { isAdmin: boolean; onViewChange: (view: MoreView) => void; view: MoreView }) {
+export function MoreScreen({ isAdmin, onCheckout, onViewChange, view }: { isAdmin: boolean; onCheckout: (customerId: string) => void; onViewChange: (view: MoreView) => void; view: MoreView }) {
+  const { can } = useBusinessSettings();
   const { colors } = useAppTheme();
   const { t } = useLanguage();
   const styles = createStyles(colors);
+  const allowedViews = moreViews.filter((item) => {
+    if (['audit', 'team'].includes(item.value)) return isAdmin;
+    if (item.value === 'memberships') return can('customers');
+    if (item.value === 'meter') return can('customers');
+    if (['settlements', 'finance'].includes(item.value)) return can('money');
+    if (['enquiries', 'notices', 'requests'].includes(item.value)) return can('operations');
+    return true;
+  });
+  const activeView = allowedViews.some((item) => item.value === view) ? view : 'settings';
 
   return (
     <View>
       <View style={styles.switcher}>
-        {moreViews.filter((item) => !['audit', 'team'].includes(item.value) || isAdmin).map((item) => {
-          const active = item.value === view;
+        {allowedViews.map((item) => {
+          const active = item.value === activeView;
 
           return (
             <Pressable
@@ -51,21 +66,25 @@ export function MoreScreen({ isAdmin, onViewChange, view }: { isAdmin: boolean; 
         })}
       </View>
 
-      {view === 'enquiries' ? (
+      {activeView === 'enquiries' ? (
         <EnquiriesScreen />
-      ) : view === 'notices' ? (
+      ) : activeView === 'notices' ? (
         <NoticesScreen />
-      ) : view === 'meter' ? (
-        <MeterScreen />
-      ) : view === 'requests' ? (
+      ) : activeView === 'meter' ? (
+        <MeterScreen onCheckout={onCheckout} />
+      ) : activeView === 'requests' ? (
         <SupportRequestsScreen />
-      ) : view === 'team' && isAdmin ? (
+      ) : activeView === 'team' && isAdmin ? (
         <StaffScreen />
-      ) : view === 'audit' && isAdmin ? (
+      ) : activeView === 'audit' && isAdmin ? (
         <AuditScreen />
-      ) : view === 'settlements' ? (
+      ) : activeView === 'settlements' ? (
         <SettlementsScreen />
-      ) : view === 'calendar' ? (
+      ) : activeView === 'finance' ? (
+        <FinanceDesk />
+      ) : activeView === 'memberships' ? (
+        <MembershipsScreen />
+      ) : activeView === 'calendar' ? (
         <InventoryCalendarScreen />
       ) : (
         <SettingsScreen />

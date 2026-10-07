@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 // @ts-expect-error Node runs this check with native TypeScript stripping.
-import { canAllocateCustomer, getInventoryCalendar, getRoomSummary, PG_ROOM_CAPACITY, ROOM_COUNT, staysOverlap } from './roomUtils.ts';
+import { canAllocateCustomer, getInventoryCalendar, getRoomOccupancy, getRoomSummary, parseStayDate, parseRoomLabel, PG_ROOM_CAPACITY, ROOM_COUNT, staysOverlap, validateInventorySettings } from './roomUtils.ts';
+import { defaultBusinessSettings, getRoomNumbers, getSeatNumbers, validateBusinessSettings } from './businessConfig';
 
 test('future reservations hold inventory without counting as occupied rooms', () => {
   const customers = [
@@ -49,4 +50,41 @@ test('inventory calendar shows future room, bed and seat commitments', () => {
   const [previousDay] = getInventoryCalendar(customers, new Date(2026, 8, 21), 1);
   assert.equal(previousDay.occupiedRooms, 0);
   assert.equal(previousDay.busySeats, 0);
+});
+
+test('PG capacity uses peak occupancy rather than the number of overlapping bookings', () => {
+  const candidate = { id: 'new', businessType: 'pg', room: 'Room 101', moveInDate: '2026-09-01', moveOutDate: '2026-09-05', moveOutTime: '00:00', status: 'booked' };
+  const first = { ...candidate, id: 'first', moveOutDate: '2026-09-03' };
+  const second = { ...candidate, id: 'second', moveInDate: '2026-09-03' };
+  assert.equal(canAllocateCustomer(candidate, [first, second], 2), true);
+  assert.equal(canAllocateCustomer(candidate, [first, { ...second, moveInDate: '2026-09-02' }], 2), false);
+  assert.equal(canAllocateCustomer(candidate, [first, second], 1), false);
+});
+
+test('stay dates reject calendar rollover and invalid times', () => {
+  assert.equal(parseStayDate('2026-02-30'), null);
+  assert.equal(parseStayDate('2026-13-01'), null);
+  assert.equal(parseStayDate('2026-09-01', '24:00'), null);
+  assert.equal(parseStayDate('2026-09-01', '12:99'), null);
+  assert.equal(parseStayDate('2026-09-01', '12:00junk'), null);
+  assert.equal(parseStayDate('2028-02-29')?.getDate(), 29);
+});
+
+test('live inventory settings drive room, bed and seat calculations and protect allocations', () => {
+  const settings = { ...defaultBusinessSettings, roomStart: 1001, roomCount: 2, pgCapacity: 3, seatPrefix: 'B', seatCount: 2 };
+  const customer = { id: 'pg', businessType: 'pg', room: '1001', status: 'checked in', moveInDate: '2026-09-01' };
+  assert.deepEqual(getRoomNumbers(settings), ['1001', '1002']);
+  assert.deepEqual(getSeatNumbers(settings), ['B01', 'B02']);
+  assert.equal(parseRoomLabel('1001').room, '1001');
+  assert.equal(getRoomSummary([customer], Date.now(), settings).availableRooms, 1);
+  assert.equal(getRoomOccupancy([customer, { ...customer, id: 'second' }], Date.now(), settings)[0].status, 'Partial');
+  assert.equal(getInventoryCalendar([customer], new Date(2026, 8, 22), 1, settings)[0].openBeds, 5);
+  assert.doesNotThrow(() => validateInventorySettings(settings, [customer]));
+  assert.throws(() => validateInventorySettings({ ...settings, roomStart: 1002 }, [customer]));
+  const member = { id: 'member', businessType: 'library', room: 'Seat B02', status: 'active' };
+  assert.throws(() => validateInventorySettings({ ...settings, seatCount: 1 }, [member]));
+  assert.throws(() => validateInventorySettings({ ...settings, pgCapacity: 1 }, [customer, { ...customer, id: 'second' }]));
+  assert.throws(() => validateBusinessSettings({ ...settings, roomCount: 1.5 }));
+  assert.throws(() => validateBusinessSettings({ ...settings, meterRate: -1 }));
+  assert.throws(() => validateBusinessSettings({ ...settings, meterRate: 10.001 }));
 });

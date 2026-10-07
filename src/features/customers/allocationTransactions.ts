@@ -4,6 +4,7 @@ import { db } from '../../lib/firebase/client';
 import type { TenantRecord } from '../../shared/types/records';
 import { getCustomerStatus } from './customerUtils';
 import { canAllocateCustomer, getAllocationKey } from './roomUtils';
+import { defaultBusinessSettings, getRoomNumbers, getSeatNumbers } from './businessConfig';
 
 const allocationStatuses = new Set(['active', 'booked', 'checked in', 'occupied']);
 
@@ -39,8 +40,8 @@ function toEntry(customerId: string, customer: TenantRecord): AllocationEntry {
   };
 }
 
-function assertAvailable(next: AllocationEntry, existing: AllocationEntry[]) {
-  if (!canAllocateCustomer(next, existing)) {
+function assertAvailable(next: AllocationEntry, existing: AllocationEntry[], capacity: number) {
+  if (!canAllocateCustomer(next, existing, capacity)) {
     throw new Error('This room or seat was just assigned. Refresh and choose another.');
   }
 }
@@ -52,6 +53,15 @@ export async function syncAllocationGuard(
   next: TenantRecord,
   knownCustomers: TenantRecord[] = [],
 ) {
+  if (previous) {
+    const latest = await transaction.get(doc(db, 'tenants', customerId));
+    const current = latest.data();
+    if (!current || ['status', 'room', 'businessType', 'rent', 'moveInDate', 'moveOutDate'].some((field) => current[field] !== previous[field])) {
+      throw new Error('This customer changed on another device. Refresh before continuing.');
+    }
+  }
+  const config = await transaction.get(doc(db, 'settings', 'business'));
+  const settings = { ...defaultBusinessSettings, ...config.data() };
   const previousGuardId = getGuardId(previous);
   const nextGuardId = getGuardId(next);
   const guardIds = [...new Set([previousGuardId, nextGuardId].filter(Boolean))];
@@ -68,7 +78,7 @@ export async function syncAllocationGuard(
         }
       });
     }
-    knownCustomers.forEach((customer) => {
+    (snapshots[index].exists() ? [] : knownCustomers).forEach((customer) => {
       if (customer.id !== customerId && getGuardId(customer) === guardId && !entries.has(customer.id)) {
         entries.set(customer.id, toEntry(customer.id, customer));
       }
@@ -78,9 +88,11 @@ export async function syncAllocationGuard(
   });
 
   if (nextGuardId) {
+    const inventory = next.businessType === 'library' ? getSeatNumbers(settings) : getRoomNumbers(settings);
+    if (nextGuardId !== previousGuardId && !inventory.includes(getAllocationKey(next.room, next.businessType))) throw new Error('Choose a room or seat from the configured inventory.');
     const nextEntry = toEntry(customerId, next);
     const entries = entriesByGuard.get(nextGuardId) || new Map<string, AllocationEntry>();
-    assertAvailable(nextEntry, [...entries.values()]);
+    assertAvailable(nextEntry, [...entries.values()], settings.pgCapacity);
     entries.set(customerId, nextEntry);
     entriesByGuard.set(nextGuardId, entries);
   }
@@ -88,15 +100,12 @@ export async function syncAllocationGuard(
   guardIds.forEach((guardId) => {
     const guardRef = doc(db, 'allocationGuards', guardId);
     const reservations = [...(entriesByGuard.get(guardId)?.values() || [])];
-    if (reservations.length) {
-      // ponytail: one small active-reservation list per unit; use per-date lock docs if a unit ever carries hundreds of future bookings.
-      transaction.set(guardRef, {
-        inventoryType: guardId.startsWith('seat-') ? 'seat' : 'room',
-        reservations,
-        updatedAt: serverTimestamp(),
-      });
-    } else {
-      transaction.delete(guardRef);
-    }
+    // Keep empty guards so stale client lists cannot restore a released reservation.
+    // ponytail: one small active-reservation list per unit; use per-date lock docs if a unit ever carries hundreds of future bookings.
+    transaction.set(guardRef, {
+      inventoryType: guardId.startsWith('seat-') ? 'seat' : 'room',
+      reservations,
+      updatedAt: serverTimestamp(),
+    });
   });
 }

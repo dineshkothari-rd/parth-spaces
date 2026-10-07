@@ -1,5 +1,5 @@
 import type { DueRecord, ExpenseRecord, InvoiceRecord, MeterReadingRecord, PaymentRecord, SettlementRecord, TenantRecord } from '../../shared/types/records';
-import { toNumber } from '../../shared/utils/money';
+import { roundMoney, toNumber } from '../../shared/utils/money';
 import { getCustomerStatusGroup } from '../customers/customerUtils';
 
 const activeStatuses = new Set(['active', 'checked in', 'occupied']);
@@ -169,12 +169,13 @@ export function getMeterReadingCharges(readings: MeterReadingRecord[] = [], tena
 
       const units = Math.max(0, current - Math.max(previous, billedThrough ?? previous));
       const recordedUnits = toNumber(reading.unitsConsumed);
-      const rate = toNumber(reading.ratePerUnit)
-        || (recordedUnits > 0 ? toNumber(reading.billAmount) / recordedUnits : 0);
+      const rate = reading.ratePerUnit !== undefined
+        ? toNumber(reading.ratePerUnit)
+        : recordedUnits > 0 ? toNumber(reading.billAmount) / recordedUnits : 0;
       billedThrough = Math.max(billedThrough ?? previous, current);
       charges[reading.id] = units > MAX_BILLABLE_METER_UNITS
         ? { amount: 0, needsReview: true, units: 0 }
-        : { amount: units * rate, units };
+        : { amount: roundMoney(units * rate), units };
 
       return charges;
     }, {});
@@ -267,13 +268,17 @@ export function calculateMonthlyDues(
     .filter((tenant) => isTenantActiveForMonth(tenant, month))
     .map((tenant) => {
       const invoice = invoices.find((item) => item.tenantId === tenant.id && item.month === month);
-      const baseAmount = invoice ? toNumber(invoice.baseAmount) : toNumber(tenant.rent);
+      const baseAmount = invoice ? toNumber(invoice.baseAmount) : (tenant.membershipManaged && month >= String(tenant.membershipStart || '').slice(0, 7) ? 0 : toNumber(tenant.rent));
       const meterAmount = invoice ? toNumber(invoice.meterAmount) : getMeterChargeForMonth(meterReadings, tenant.id, month);
-      const rent = invoice ? toNumber(invoice.total) : baseAmount + meterAmount;
+      const rent = invoice ? toNumber(invoice.total) : roundMoney(baseAmount + meterAmount);
       const paid = paymentsByTenant[tenant.id] || 0;
-      const balance = Math.max(0, rent - paid);
+      const balance = roundMoney(Math.max(0, rent - paid));
 
       return {
+        extraCharge: toNumber(invoice?.extraCharge),
+        discount: toNumber(invoice?.discount),
+        dueDate: invoice?.dueDate || `${month}-10`,
+        note: invoice?.note || '',
         baseAmount,
         balance,
         businessType: invoice?.businessType || tenant.businessType || 'pg',
@@ -342,17 +347,17 @@ export function calculateSettlement({
   ledgerBalance: number;
   paymentReceived: number;
 }) {
-  const grossDue = Math.max(0, ledgerBalance + extraCharge - discount);
+  const grossDue = roundMoney(Math.max(0, ledgerBalance + extraCharge - discount));
   const depositApplied = Math.min(depositHeld, grossDue);
-  const amountAfterDeposit = grossDue - depositApplied;
+  const amountAfterDeposit = roundMoney(grossDue - depositApplied);
   const received = Math.min(paymentReceived, amountAfterDeposit);
 
   return {
     depositApplied,
-    finalBalance: amountAfterDeposit - received,
+    finalBalance: roundMoney(amountAfterDeposit - received),
     grossDue,
     paymentReceived: received,
-    refundDue: Math.max(0, depositHeld - grossDue),
+    refundDue: roundMoney(Math.max(0, depositHeld - grossDue)),
   };
 }
 

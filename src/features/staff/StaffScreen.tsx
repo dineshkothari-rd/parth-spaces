@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import { createUserWithEmailAndPassword, deleteUser, sendPasswordResetEmail, signOut, type User } from 'firebase/auth';
 import { collection, doc, serverTimestamp, writeBatch } from 'firebase/firestore';
@@ -12,6 +12,7 @@ import { useFirestoreCollection } from '../../shared/hooks/useFirestoreCollectio
 import { useLanguage } from '../../shared/i18n/LanguageProvider';
 import type { AccountAccessStatus } from '../../shared/types/admin';
 import type { FirestoreRecord } from '../../shared/types/records';
+import { defaultStaffPermissions, staffPermissions, type StaffPermission, type StaffPermissions } from '../../shared/types/permissions';
 
 type StaffRecord = FirestoreRecord & {
   accessStatus?: AccountAccessStatus;
@@ -19,6 +20,7 @@ type StaffRecord = FirestoreRecord & {
   name?: string;
   role?: string;
   uid?: string;
+  permissions?: StaffPermissions;
 };
 
 export function StaffScreen() {
@@ -64,6 +66,7 @@ export function StaffScreen() {
         email: normalizedEmail,
         name: name.trim(),
         role: 'staff',
+        permissions: defaultStaffPermissions,
         uid: createdUser.uid,
         updatedAt: serverTimestamp(),
       });
@@ -134,6 +137,25 @@ export function StaffScreen() {
     }
   }
 
+  async function changePermission(member: StaffRecord, permission: StaffPermission, enabled: boolean) {
+    const actorUid = auth.currentUser?.uid;
+    if (!actorUid) return setError(t('Please sign in again.'));
+    setBusyId(member.id);
+    setError('');
+    try {
+      const batch = writeBatch(db);
+      batch.update(doc(db, 'users', member.id), { [`permissions.${permission}`]: enabled, updatedAt: serverTimestamp() });
+      batch.set(doc(collection(db, 'auditEvents')), {
+        action: 'staff.permissions_updated', actorUid, createdAt: serverTimestamp(), staffUid: member.id, permission, enabled,
+      });
+      await batch.commit();
+    } catch (error) {
+      setError(error instanceof Error ? error.message : t('Could not update staff permissions.'));
+    } finally {
+      setBusyId('');
+    }
+  }
+
   function confirmRevoke(member: StaffRecord) {
     Alert.alert(t('Revoke staff access?'), member.name || member.email || t('Staff'), [
       { text: t('Cancel'), style: 'cancel' },
@@ -178,6 +200,11 @@ export function StaffScreen() {
                 </View>
                 <Text style={styles.status}>{t(`${status.charAt(0).toUpperCase()}${status.slice(1)}`)}</Text>
               </View>
+              <Text style={styles.staffEmail}>{t('Staff can view daily records. These permissions control changes. Checkout requires customer and money permissions.')}</Text>
+              {(Object.keys(staffPermissions) as StaffPermission[]).map((permission) => <View key={permission} style={styles.staffHeader}>
+                <Text style={[styles.staffEmail, styles.staffCopy]}>{t(staffPermissions[permission])}</Text>
+                <Switch accessibilityLabel={t(staffPermissions[permission])} disabled={busy || status === 'revoked'} value={member.permissions?.[permission] ?? true} onValueChange={(value) => changePermission(member, permission, value)} />
+              </View>)}
               <View style={styles.actions}>
                 {status !== 'revoked' ? (
                   <Pressable disabled={busy} onPress={() => updateAccess(member, status === 'suspended' ? 'active' : 'suspended')} style={styles.action}>

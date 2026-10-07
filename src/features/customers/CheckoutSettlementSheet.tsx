@@ -6,10 +6,14 @@ import { TextField } from '../../shared/components/TextField';
 import type { TenantRecord } from '../../shared/types/records';
 import { money, toNumber } from '../../shared/utils/money';
 import { useLanguage } from '../../shared/i18n/LanguageProvider';
+import { paymentModes, parseAmount, validatePaymentDetails } from '../money/financeMath';
+import { FilterPill } from './FilterPill';
 import { calculateSettlement } from '../operations/operationsMath';
 import { getCustomerName } from './customerUtils';
 
 export type CheckoutSettlementDraft = {
+  paymentMode: string;
+  reference: string;
   depositHeld: number;
   discount: number;
   extraCharge: number;
@@ -17,6 +21,7 @@ export type CheckoutSettlementDraft = {
 };
 
 export function CheckoutSettlementSheet({
+  heldDeposit,
   automaticCharge,
   customer,
   ledgerBalance,
@@ -24,6 +29,7 @@ export function CheckoutSettlementSheet({
   onSubmit,
   saving,
 }: {
+  heldDeposit?: number;
   automaticCharge: number;
   customer: TenantRecord;
   ledgerBalance: number;
@@ -34,13 +40,16 @@ export function CheckoutSettlementSheet({
   const { colors } = useAppTheme();
   const { t } = useLanguage();
   const styles = createStyles(colors);
-  const [depositHeld, setDepositHeld] = useState('');
+  const [depositHeld, setDepositHeld] = useState(heldDeposit === undefined ? '' : String(heldDeposit));
+  const [paymentMode, setPaymentMode] = useState('Cash');
+  const [reference, setReference] = useState('');
   const [discount, setDiscount] = useState('');
   const [extraCharge, setExtraCharge] = useState('');
   const [paymentReceived, setPaymentReceived] = useState('');
   const [error, setError] = useState('');
   const draft = {
-    depositHeld: toNumber(depositHeld),
+    paymentMode, reference: reference.trim(),
+    depositHeld: heldDeposit ?? toNumber(depositHeld),
     discount: toNumber(discount),
     extraCharge: automaticCharge + toNumber(extraCharge),
     ledgerBalance,
@@ -49,11 +58,15 @@ export function CheckoutSettlementSheet({
   const result = calculateSettlement(draft);
 
   function submit() {
+    try {
+      for (const value of [heldDeposit === undefined ? depositHeld || '0' : String(heldDeposit), discount || '0', extraCharge || '0', paymentReceived || '0']) parseAmount(value, true);
+      if (draft.paymentReceived > 0) validatePaymentDetails(paymentMode, reference);
+    } catch (error) { setError(error instanceof Error ? error.message : 'Invalid amount.'); return; }
     const values = [draft.depositHeld, draft.discount, draft.extraCharge, draft.paymentReceived];
     if (values.some((value) => value < 0 || value > 10_000_000)) return setError(t('Enter valid settlement amounts.'));
     if (draft.discount > ledgerBalance + draft.extraCharge) return setError(t('Discount cannot exceed the total amount due.'));
     if (draft.paymentReceived > result.grossDue - result.depositApplied) return setError(t('Payment received is more than the remaining amount.'));
-    onSubmit({ depositHeld: draft.depositHeld, discount: draft.discount, extraCharge: draft.extraCharge, paymentReceived: draft.paymentReceived });
+    onSubmit({ paymentMode, reference: reference.trim(), depositHeld: draft.depositHeld, discount: draft.discount, extraCharge: draft.extraCharge, paymentReceived: draft.paymentReceived });
   }
 
   return (
@@ -69,12 +82,15 @@ export function CheckoutSettlementSheet({
             <Summary label={t('Ledger due')} styles={styles} value={money(ledgerBalance)} />
             {automaticCharge ? <Summary label={t('Final meter charge')} styles={styles} value={money(automaticCharge)} /> : null}
             <View style={styles.fields}>
-              <TextField keyboardType="numeric" label="Deposit already received and held" onChangeText={setDepositHeld} placeholder="0" value={depositHeld} />
+              <TextField editable={heldDeposit === undefined} keyboardType="numeric" label="Deposit already received and held" onChangeText={setDepositHeld} placeholder="0" value={heldDeposit === undefined ? depositHeld : String(heldDeposit)} />
+              <Text style={styles.subtitle}>{t(heldDeposit === undefined ? 'Legacy deposit: enter only the amount actually held. New deposits should be recorded in Money management first.' : 'Deposit comes from the recorded ledger and will be closed with this settlement.')}</Text>
               <TextField keyboardType="numeric" label="Discount" onChangeText={setDiscount} placeholder="0" value={discount} />
               <TextField keyboardType="numeric" label="Other extra charge" onChangeText={setExtraCharge} placeholder="0" value={extraCharge} />
               <TextField keyboardType="numeric" label="Payment received now" onChangeText={setPaymentReceived} placeholder="0" value={paymentReceived} />
             </View>
 
+            <View style={{ flexDirection: 'row', gap: 8 }}>{paymentModes.map((mode) => <FilterPill key={mode} label={mode} active={paymentMode === mode} onPress={() => setPaymentMode(mode)} />)}</View>
+            <TextField label="Transaction reference" value={reference} onChangeText={setReference} maxLength={120} />
             <View style={styles.result}>
               <Summary label={t('Gross due')} styles={styles} value={money(result.grossDue)} />
               <Summary label={t('Deposit applied')} styles={styles} value={money(result.depositApplied)} />

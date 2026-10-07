@@ -13,6 +13,7 @@ import { CustomerWorkspaceScreen } from '../features/customer/CustomerWorkspaceS
 import { AppErrorBoundary } from '../shared/components/AppErrorBoundary';
 import { AppThemeProvider, radius, spacing, typography, useAppTheme, type AppColors } from '../design/tokens';
 import { LanguageProvider, useLanguage } from '../shared/i18n/LanguageProvider';
+import { BusinessSettingsProvider } from '../features/settings/BusinessSettingsProvider';
 
 export function AppShell() {
   return (
@@ -166,9 +167,9 @@ function AppShellContent({ session }: { session: ReturnType<typeof useAppSession
             onSignOut={session.signOut}
           />
         ) : session.profile?.role === 'customer' ? (
-          <CustomerWorkspaceScreen onSignOut={session.signOut} profile={session.profile} />
+          <BusinessSettingsProvider key={session.profile.uid} onSignOut={session.signOut} profile={session.profile}><CustomerWorkspaceScreen onSignOut={session.signOut} profile={session.profile} /></BusinessSettingsProvider>
         ) : session.profile ? (
-          <WorkspaceScreen admin={session.profile} onSignOut={session.signOut} />
+          <BusinessSettingsProvider key={session.profile.uid} onSignOut={session.signOut} profile={session.profile}><WorkspaceScreen admin={session.profile} onSignOut={session.signOut} /></BusinessSettingsProvider>
         ) : (
           <SignInScreen error={session.error} loading={session.submitting} onForgotPassword={session.requestPasswordReset} onSignIn={session.signIn} />
         )}

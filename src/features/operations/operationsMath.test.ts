@@ -4,6 +4,17 @@ import test from 'node:test';
 // @ts-expect-error Node runs this check with native TypeScript stripping.
 import { buildDuesCsv, calculateMonthlyDues, calculateOutstandingBalance, calculatePaymentResult, calculateSettlement, getDailyStayActions, getMeterChargeForMonth, getMeterReadingCandidates, getMeterReadingCharges, getRemainingPaymentBalance } from './operationsMath.ts';
 
+test('meter charges retain their recorded rate and round decimal charges to paise', () => {
+  const readings = [
+    { id: 'baseline', tenantId: 'tenant-1', currentReading: 100, previousReading: 100, readingType: 'check-in' as const, ratePerUnit: 10 },
+    { id: 'decimal', tenantId: 'tenant-1', currentReading: 100.3, previousReading: 100, ratePerUnit: 8.55 },
+    { id: 'free', tenantId: 'tenant-1', currentReading: 110, previousReading: 100.3, ratePerUnit: 0, billAmount: 100, unitsConsumed: 9.7 },
+  ];
+  const charges = getMeterReadingCharges(readings, 'tenant-1');
+  assert.equal(charges.decimal.amount, 2.56);
+  assert.equal(charges.free.amount, 0);
+});
+
 test('reservation to checkout keeps an accurate customer ledger', () => {
   const reservation = { id: 'tenant-1', businessType: 'pg', moveInDate: '2026-08-10', rent: 3000, status: 'booked' };
   assert.deepEqual(calculateMonthlyDues([reservation], [], '2026-08'), []);
@@ -15,6 +26,7 @@ test('reservation to checkout keeps an accurate customer ledger', () => {
     { id: 'payment-2', amountPaid: 500, month: '2026-08', tenantId: 'tenant-1' },
   ];
   assert.deepEqual(calculateMonthlyDues([checkedIn], payments, '2026-08', readings)[0], {
+    extraCharge: 0, discount: 0, dueDate: '2026-08-10', note: '',
     baseAmount: 3000,
     balance: 1900,
     businessType: 'pg',

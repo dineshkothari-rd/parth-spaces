@@ -45,6 +45,21 @@ service cloud.firestore {
       return signedIn() && (admin() || staffAccessAllowed());
     }
 
+    function permitted(permission) {
+      return admin() || (staffAccessAllowed()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid))
+          .data.get('permissions', {}).get(permission, true) == true);
+    }
+
+    function validPermissions(data) {
+      let permissions = data.get('permissions', {});
+      return permissions is map
+        && permissions.keys().hasOnly(['customers', 'money', 'operations'])
+        && permissions.get('customers', true) is bool
+        && permissions.get('money', true) is bool
+        && permissions.get('operations', true) is bool;
+    }
+
     function customer() {
       return signedIn() && role() == 'customer';
     }
@@ -87,7 +102,7 @@ service cloud.firestore {
     }
 
     function staffRevokingCustomerUser() {
-      return staffAccessAllowed()
+      return permitted('customers')
         && resource.data.role == 'customer'
         && request.resource.data.role == 'customer'
         && request.resource.data.accessStatus == 'revoked'
@@ -108,9 +123,9 @@ service cloud.firestore {
           .data.accessStatus == 'active';
     }
 
-    function staffUpdatingTenantAccess() {
+    function staffUpdatingTenantAccess(tenantId) {
       let changed = request.resource.data.diff(resource.data).affectedKeys();
-      return staffAccessAllowed()
+      return permitted('customers')
         && validTenantStatusTransition(changed)
         && !changed.hasAny(['invitedAt', 'invitedBy', 'userId'])
         && (!changed.hasAny(['accessStatus'])
@@ -159,9 +174,11 @@ service cloud.firestore {
     function validPaymentCreate() {
       return request.resource.data.keys().hasOnly([
           'amountPaid', 'balance', 'businessType', 'createdAt', 'createdBy', 'month',
-          'note', 'paidOn', 'status', 'tenantId', 'tenantName', 'tenantRoom', 'totalRent'
+          'note', 'paidOn', 'status', 'tenantId', 'tenantName', 'tenantRoom', 'totalRent', 'paymentMode', 'reference', 'collectedBy'
         ])
         && request.resource.data.createdAt == request.time
+        && validPaymentDetails(request.resource.data)
+        && request.resource.data.get('collectedBy', request.auth.uid) == request.auth.uid
         && request.resource.data.status == 'Recorded'
         && request.resource.data.businessType in ['hotel', 'library', 'pg']
         && validMonth(request.resource.data.month)
@@ -180,9 +197,10 @@ service cloud.firestore {
 
     function validExpenseCreate() {
       return request.resource.data.keys().hasOnly([
-          'amount', 'category', 'createdAt', 'createdBy', 'date', 'note', 'paymentMode', 'title'
+          'amount', 'category', 'createdAt', 'createdBy', 'date', 'note', 'paymentMode', 'reference', 'title'
         ])
         && request.resource.data.createdAt == request.time
+        && validPaymentDetails(request.resource.data)
         && request.resource.data.amount <= 10000000
         && optionalString(request.resource.data, 'category', 80)
         && optionalString(request.resource.data, 'date', 30)
@@ -196,7 +214,7 @@ service cloud.firestore {
     function validInvoiceCreate(invoiceId) {
       return request.resource.data.keys().hasOnly([
           'baseAmount', 'businessType', 'issuedAt', 'issuedBy', 'meterAmount', 'month',
-          'status', 'tenantId', 'tenantName', 'tenantRoom', 'total'
+          'status', 'tenantId', 'tenantName', 'tenantRoom', 'total', 'extraCharge', 'discount', 'dueDate', 'note', 'membershipId'
         ])
         && invoiceId == request.resource.data.tenantId + '_' + request.resource.data.month
         && request.resource.data.issuedAt == request.time
@@ -211,7 +229,17 @@ service cloud.firestore {
         && request.resource.data.meterAmount is number
         && request.resource.data.meterAmount >= 0
         && request.resource.data.total is number
-        && request.resource.data.total == request.resource.data.baseAmount + request.resource.data.meterAmount
+        && validSettingAmount(request.resource.data.get('extraCharge', 0), 10000000)
+        && validSettingAmount(request.resource.data.get('discount', 0), 10000000)
+        && optionalString(request.resource.data, 'note', 1000)
+        && (request.resource.data.get('dueDate', '') == '' || validDay(request.resource.data.dueDate))
+        && request.resource.data.total >= 0
+        && closeAmount(request.resource.data.total, request.resource.data.baseAmount + request.resource.data.meterAmount
+          + request.resource.data.get('extraCharge', 0) - request.resource.data.get('discount', 0))
+        && (!request.resource.data.keys().hasAny(['membershipId']) ||
+          (getAfter(/databases/$(database)/documents/memberships/$(request.resource.data.membershipId)).data.tenantId == request.resource.data.tenantId
+            && getAfter(/databases/$(database)/documents/memberships/$(request.resource.data.membershipId)).data.monthlyFee == request.resource.data.baseAmount
+            && request.resource.data.month in getAfter(/databases/$(database)/documents/memberships/$(request.resource.data.membershipId)).data.invoiceMonths))
         && request.resource.data.total <= 10000000;
     }
 
@@ -233,15 +261,15 @@ service cloud.firestore {
         && data.depositHeld is number && data.depositHeld >= 0 && data.depositHeld <= 10000000
         && data.discount is number && data.discount >= 0 && data.discount <= 10000000
         && data.extraCharge is number && data.extraCharge >= 0 && data.extraCharge <= 10000000
-        && data.grossDue is number && data.grossDue == data.ledgerBalance + data.extraCharge - data.discount
+        && data.grossDue is number && closeAmount(data.grossDue, data.ledgerBalance + data.extraCharge - data.discount)
         && data.grossDue >= 0 && data.grossDue <= 10000000
         && data.depositApplied is number && data.depositApplied >= 0 && data.depositApplied <= data.depositHeld
         && data.refundDue is number && data.refundDue >= 0
-        && data.depositApplied + data.refundDue == data.depositHeld
+        && closeAmount(data.depositApplied + data.refundDue, data.depositHeld)
         && data.paymentReceived is number && data.paymentReceived >= 0
         && data.paymentReceived <= data.grossDue - data.depositApplied
         && data.finalBalance is number
-        && data.finalBalance == data.grossDue - data.depositApplied - data.paymentReceived
+        && closeAmount(data.finalBalance, data.grossDue - data.depositApplied - data.paymentReceived)
         && data.paidAtSettlement is number && data.paidAtSettlement >= data.paymentReceived
         && ((data.refundDue > 0 && data.refundStatus == 'Due')
           || (data.refundDue == 0 && data.refundStatus == 'None'));
@@ -267,10 +295,44 @@ service cloud.firestore {
         || (resource.data.status in ['active', 'checked in', 'occupied'] && request.resource.data.status in ['checked out', 'inactive']);
     }
 
+    match /settings/{settingsId} {
+      allow read: if settingsId == 'business' && (staff() || customerAccessAllowed());
+      allow create, update: if settingsId == 'business' && admin()
+        && request.resource.data.keys().hasOnly([
+          'name', 'address', 'phone', 'roomStart', 'roomCount', 'pgCapacity', 'seatPrefix', 'seatCount',
+          'defaultPgRent', 'defaultHotelCharge', 'defaultLibraryFee', 'meterRate', 'upiId', 'upiQr', 'updatedAt', 'updatedBy'
+        ])
+        && optionalString(request.resource.data, 'upiId', 160)
+        && (request.resource.data.get('upiId', '') == '' || request.resource.data.upiId.matches('^[a-zA-Z0-9._-]{2,100}@[a-zA-Z0-9.-]{2,50}$'))
+        && optionalImage(request.resource.data, 'upiQr', 260000)
+        && request.resource.data.name is string && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 120
+        && optionalString(request.resource.data, 'address', 500)
+        && optionalString(request.resource.data, 'phone', 30)
+        && request.resource.data.roomStart is int && request.resource.data.roomStart > 0
+        && request.resource.data.roomCount is int && request.resource.data.roomCount > 0 && request.resource.data.roomCount <= 500
+        && request.resource.data.roomStart + request.resource.data.roomCount - 1 <= 9999
+        && request.resource.data.pgCapacity is int && request.resource.data.pgCapacity > 0 && request.resource.data.pgCapacity <= 20
+        && request.resource.data.seatPrefix is string && request.resource.data.seatPrefix.matches('^[A-Z]$')
+        && request.resource.data.seatCount is int && request.resource.data.seatCount > 0 && request.resource.data.seatCount <= 999
+        && validSettingAmount(request.resource.data.defaultPgRent, 10000000)
+        && validSettingAmount(request.resource.data.defaultHotelCharge, 10000000)
+        && validSettingAmount(request.resource.data.defaultLibraryFee, 10000000)
+        && validSettingAmount(request.resource.data.meterRate, 1000)
+        && request.resource.data.updatedBy == request.auth.uid
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    function validSettingAmount(value, maximum) {
+      return value is number && value >= 0 && value <= maximum;
+    }
+
     match /users/{userId} {
       allow read: if admin() || (signedIn() && request.auth.uid == userId);
       allow create, update: if admin()
-        && request.resource.data.role in ['admin', 'staff', 'customer'];
+        && request.resource.data.role in ['admin', 'staff', 'customer']
+        && validPermissions(request.resource.data);
       allow update: if customerActivatingUser(userId)
         || staffActivatingUser(userId)
         || staffRevokingCustomerUser();
@@ -284,28 +346,34 @@ service cloud.firestore {
 
     match /tenants/{tenantId} {
       allow read: if staff() || (customerAccessAllowed() && tenantId == customerId());
-      allow create: if staff()
+      allow create: if permitted('customers')
         && validTenantDocument(request.resource.data)
+        && !request.resource.data.keys().hasAny(['membershipManaged', 'membershipEnd', 'membershipStart', 'membershipId'])
         && !request.resource.data.keys().hasAny(['accessStatus', 'invitedAt', 'invitedBy', 'userId']);
-      allow update: if (admin() && validTenantDocument(request.resource.data))
-        || (staffUpdatingTenantAccess() && validTenantDocument(request.resource.data))
+      allow update: if ((admin() || staffUpdatingTenantAccess(tenantId))
+          && validTenantDocument(request.resource.data)
+          && validTenantMembership(tenantId)
+          && (resource.data.status == request.resource.data.status
+            || request.resource.data.status != 'checked out'
+            || (permitted('money')
+              && getAfter(/databases/$(database)/documents/settlements/$(tenantId)).data.finalizedAt == request.time)))
         || customerActivatingTenant(tenantId);
       allow delete: if false;
     }
 
     match /allocationGuards/{guardId} {
       allow read: if staff();
-      allow create, update: if staff()
+      allow create, update: if permitted('customers')
         && request.resource.data.inventoryType in ['room', 'seat']
         && request.resource.data.reservations is list
         && request.resource.data.reservations.size() <= 100
         && request.resource.data.updatedAt == request.time;
-      allow delete: if staff();
+      allow delete: if permitted('customers');
     }
 
     match /payments/{paymentId} {
       allow read: if staff() || (customerAccessAllowed() && resource.data.tenantId == customerId());
-      allow create: if staff()
+      allow create: if permitted('money')
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.tenantId is string
         && exists(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId))
@@ -317,7 +385,7 @@ service cloud.firestore {
             && request.resource.data.month == get(/databases/$(database)/documents/settlements/$(request.resource.data.tenantId)).data.month
             && request.resource.data.totalRent == get(/databases/$(database)/documents/settlements/$(request.resource.data.tenantId)).data.grossDue
             && request.resource.data.amountPaid <= get(/databases/$(database)/documents/settlements/$(request.resource.data.tenantId)).data.finalBalance));
-      allow update: if staff()
+      allow update: if permitted('money')
         && !exists(/databases/$(database)/documents/settlements/$(resource.data.tenantId))
         && resource.data.get('status', '') != 'Voided'
         && request.resource.data.status == 'Voided'
@@ -328,7 +396,7 @@ service cloud.firestore {
 
     match /invoices/{invoiceId} {
       allow read: if staff() || (customerAccessAllowed() && resource.data.tenantId == customerId());
-      allow create: if staff()
+      allow create: if permitted('money')
         && request.resource.data.tenantId is string
         && exists(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId))
         && validInvoiceCreate(invoiceId);
@@ -337,31 +405,38 @@ service cloud.firestore {
 
     match /settlements/{settlementId} {
       allow read: if staff() || (customerAccessAllowed() && resource.data.tenantId == customerId());
-      allow create: if staff()
+      allow create: if permitted('money')
         && request.resource.data.tenantId is string
         && exists(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId))
         && get(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId)).data.status in ['active', 'checked in', 'occupied']
         && getAfter(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId)).data.status == 'checked out'
         && getAfter(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId)).data.checkedOutAt == request.time
-        && validSettlementCreate(settlementId);
-      allow update: if staff()
+        && validSettlementCreate(settlementId)
+        && (!exists(/databases/$(database)/documents/depositAccounts/$(settlementId))
+          || (request.resource.data.depositHeld == depositBefore(settlementId)
+            && getAfter(/databases/$(database)/documents/depositAccounts/$(settlementId)).data.held == 0
+            && getAfter(/databases/$(database)/documents/depositAccounts/$(settlementId)).data.updatedAt == request.time));
+      allow update: if permitted('money')
         && resource.data.refundStatus == 'Due'
         && request.resource.data.refundStatus == 'Paid'
         && request.resource.data.refundedBy == request.auth.uid
         && request.resource.data.refundedAt == request.time
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['refundStatus', 'refundedAt', 'refundedBy']);
+          .hasOnly(['refundStatus', 'refundedAt', 'refundedBy', 'refundMode', 'refundReference'])
+        && request.resource.data.get('refundMode', 'Cash') in ['Cash', 'UPI', 'Bank']
+        && optionalString(request.resource.data, 'refundReference', 120)
+        && (request.resource.data.get('refundMode', 'Cash') == 'Cash' || request.resource.data.get('refundReference', '').size() > 0);
       allow delete: if false;
     }
 
     match /expenses/{expenseId} {
       allow read: if staff();
-      allow create: if staff()
+      allow create: if permitted('money')
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.amount is number
         && request.resource.data.amount > 0
         && validExpenseCreate();
-      allow update: if staff()
+      allow update: if permitted('money')
         && resource.data.status != 'Voided'
         && request.resource.data.status == 'Voided'
         && request.resource.data.voidedBy == request.auth.uid
@@ -371,13 +446,13 @@ service cloud.firestore {
 
     match /meterReadings/{readingId} {
       allow read: if staff() || (customerAccessAllowed() && resource.data.tenantId == customerId());
-      allow create: if staff()
+      allow create: if permitted('customers')
         && request.resource.data.tenantId is string
         && exists(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId))
         && request.resource.data.currentReading is number
         && request.resource.data.currentReading >= 0
         && validMeterReadingCreate();
-      allow update: if staff()
+      allow update: if permitted('customers')
         && resource.data.get('status', '') != 'Voided'
         && request.resource.data.status == 'Voided'
         && request.resource.data.voidedBy == request.auth.uid
@@ -393,7 +468,7 @@ service cloud.firestore {
         || (customerAccessAllowed()
           && resource.data.audience == 'customer'
           && resource.data.tenantId == customerId());
-      allow create, update: if staff()
+      allow create, update: if permitted('operations')
         && request.resource.data.title is string
         && request.resource.data.title.size() > 0
         && request.resource.data.title.size() <= 120
@@ -403,11 +478,12 @@ service cloud.firestore {
         && request.resource.data.audience in ['all', 'customer', 'staff']
         && (request.resource.data.audience != 'customer'
           || request.resource.data.tenantId is string);
-      allow delete: if staff();
+      allow delete: if permitted('operations');
     }
 
     match /enquiries/{enquiryId} {
-      allow read, write: if staff();
+      allow read: if staff();
+      allow write: if permitted('operations');
     }
 
     match /supportRequests/{requestId} {
@@ -425,7 +501,7 @@ service cloud.firestore {
         && request.resource.data.message is string
         && request.resource.data.message.size() > 0
         && request.resource.data.message.size() <= 2000;
-      allow update: if staff()
+      allow update: if permitted('operations')
         && request.resource.data.status in ['open', 'in_progress', 'resolved']
         && request.resource.data.updatedBy == request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys()
@@ -452,12 +528,156 @@ service cloud.firestore {
           'customer.archived', 'customer.checked_in', 'customer.checked_out',
           'customer.reservation_cancelled', 'expense.created', 'expense.voided',
           'invoices.generated', 'meter.created', 'meter.voided', 'payment.created', 'payment.voided',
-          'settlement.finalized', 'settlement.refund_paid',
+          'settlement.finalized', 'settlement.refund_paid', 'deposit.recorded', 'money.reconciled',
+          'membership.plan_created', 'membership.plan_retired', 'membership.renewed', 'agreement.created', 'agreement.accepted',
           'staff.access_active', 'staff.access_revoked', 'staff.access_suspended',
-          'staff.invited', 'support_request.in_progress', 'support_request.resolved'
+          'staff.invited', 'staff.permissions_updated', 'business.settings_updated', 'support_request.in_progress', 'support_request.resolved'
         ]
         && request.resource.data.createdAt == request.time;
       allow update, delete: if false;
+    }
+
+
+    function validDay(value) {
+      return value is string && value.matches('^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$');
+    }
+    function closeAmount(first, second) {
+      return first >= second - 0.000001 && first <= second + 0.000001;
+    }
+    function validPaymentDetails(data) {
+      return data.get('paymentMode', 'Cash') in ['Cash', 'UPI', 'Bank']
+        && optionalString(data, 'reference', 120)
+        && (data.get('paymentMode', 'Cash') == 'Cash' || data.get('reference', '').size() > 0);
+    }
+    function validTenantMembership(tenantId) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return (!changed.hasAny(['membershipManaged', 'membershipEnd', 'membershipStart', 'membershipId'])
+          && (!resource.data.get('membershipManaged', false) || request.resource.data.status == 'checked out'
+            || !changed.hasAny(['businessType', 'moveOutDate', 'rent'])))
+        || validMembershipTenantUpdate(tenantId);
+    }
+    function validMembershipTenantUpdate(tenantId) {
+      let member = getAfter(/databases/$(database)/documents/memberships/$(request.resource.data.membershipId)).data;
+      return permitted('money')
+        && request.resource.data.businessType == 'library'
+        && request.resource.data.membershipManaged == true
+        && member.createdAt == request.time
+        && member.tenantId == tenantId
+        && member.end == request.resource.data.membershipEnd
+        && member.end == request.resource.data.moveOutDate
+        && member.seat == request.resource.data.room
+        && request.resource.data.membershipStart == resource.data.get('membershipStart', member.start);
+    }
+    function depositBefore(tenantId) {
+      return exists(/databases/$(database)/documents/depositAccounts/$(tenantId))
+        ? get(/databases/$(database)/documents/depositAccounts/$(tenantId)).data.held : 0;
+    }
+    match /depositAccounts/{tenantId} {
+      allow read: if staff() || (customerAccessAllowed() && tenantId == customerId());
+      allow create, update: if permitted('money')
+        && request.resource.data.keys().hasOnly(['tenantId', 'held', 'eventId', 'updatedAt', 'updatedBy'])
+        && request.resource.data.tenantId == tenantId
+        && validSettingAmount(request.resource.data.held, 10000000)
+        && request.resource.data.updatedAt == request.time && request.resource.data.updatedBy == request.auth.uid
+        && getAfter(/databases/$(database)/documents/depositEvents/$(request.resource.data.eventId)).data.createdAt == request.time
+        && getAfter(/databases/$(database)/documents/depositEvents/$(request.resource.data.eventId)).data.tenantId == tenantId
+        && getAfter(/databases/$(database)/documents/depositEvents/$(request.resource.data.eventId)).data.before == depositBefore(tenantId)
+        && getAfter(/databases/$(database)/documents/depositEvents/$(request.resource.data.eventId)).data.after == request.resource.data.held;
+      allow delete: if false;
+    }
+    match /depositEvents/{eventId} {
+      allow read: if staff() || (customerAccessAllowed() && resource.data.tenantId == customerId());
+      allow create: if permitted('money')
+        && request.resource.data.keys().hasOnly(['tenantId', 'tenantName', 'kind', 'amount', 'before', 'after', 'paymentMode', 'reference', 'note', 'createdAt', 'createdBy'])
+        && exists(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId))
+        && request.resource.data.createdBy == request.auth.uid && request.resource.data.createdAt == request.time
+        && optionalString(request.resource.data, 'tenantName', 120)
+        && optionalString(request.resource.data, 'note', 1000) && request.resource.data.note.size() > 0
+        && validPaymentDetails(request.resource.data)
+        && request.resource.data.kind in ['collection', 'refund', 'deduction', 'application']
+        && validSettingAmount(request.resource.data.amount, 10000000)
+        && (request.resource.data.amount > 0 || request.resource.data.kind == 'application')
+        && request.resource.data.before == depositBefore(request.resource.data.tenantId)
+        && validSettingAmount(request.resource.data.after, 10000000)
+        && closeAmount(request.resource.data.after, request.resource.data.before +
+          (request.resource.data.kind == 'collection' ? request.resource.data.amount : -request.resource.data.amount))
+        && getAfter(/databases/$(database)/documents/depositAccounts/$(request.resource.data.tenantId)).data.eventId == eventId
+        && getAfter(/databases/$(database)/documents/depositAccounts/$(request.resource.data.tenantId)).data.held == request.resource.data.after
+        && (request.resource.data.kind == 'application'
+          ? (request.resource.data.after == 0
+            && getAfter(/databases/$(database)/documents/settlements/$(request.resource.data.tenantId)).data.finalizedAt == request.time
+            && getAfter(/databases/$(database)/documents/settlements/$(request.resource.data.tenantId)).data.depositHeld == request.resource.data.before)
+          : !exists(/databases/$(database)/documents/settlements/$(request.resource.data.tenantId)));
+      allow update, delete: if false;
+    }
+    match /reconciliations/{checkId} {
+      allow read: if staff();
+      allow create: if permitted('money')
+        && request.resource.data.keys().hasOnly(['day', 'cashOpening', 'bankOpening', 'cashExpected', 'bankExpected', 'cashActual', 'bankActual', 'cashDifference', 'bankDifference', 'cashMovement', 'bankMovement', 'note', 'createdAt', 'createdBy'])
+        && validDay(request.resource.data.day)
+        && request.resource.data.createdAt == request.time && request.resource.data.createdBy == request.auth.uid
+        && validSettingAmount(request.resource.data.cashOpening, 10000000) && validSettingAmount(request.resource.data.bankOpening, 10000000)
+        && validSettingAmount(request.resource.data.cashActual, 10000000) && validSettingAmount(request.resource.data.bankActual, 10000000)
+        && request.resource.data.cashMovement is number && request.resource.data.bankMovement is number
+        && request.resource.data.cashExpected is number && request.resource.data.bankExpected is number
+        && request.resource.data.cashDifference is number && request.resource.data.bankDifference is number
+        && closeAmount(request.resource.data.cashExpected, request.resource.data.cashOpening + request.resource.data.cashMovement)
+        && closeAmount(request.resource.data.bankExpected, request.resource.data.bankOpening + request.resource.data.bankMovement)
+        && closeAmount(request.resource.data.cashDifference, request.resource.data.cashActual - request.resource.data.cashExpected)
+        && closeAmount(request.resource.data.bankDifference, request.resource.data.bankActual - request.resource.data.bankExpected)
+        && optionalString(request.resource.data, 'note', 1000);
+      allow update, delete: if false;
+    }
+    match /membershipPlans/{planId} {
+      allow read: if staff();
+      allow create: if admin()
+        && request.resource.data.keys().hasOnly(['name', 'months', 'monthlyFee', 'active', 'createdAt', 'createdBy'])
+        && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 120
+        && request.resource.data.months is int && request.resource.data.months >= 1 && request.resource.data.months <= 12
+        && validSettingAmount(request.resource.data.monthlyFee, 10000000)
+        && request.resource.data.active == true && request.resource.data.createdAt == request.time && request.resource.data.createdBy == request.auth.uid;
+      allow update: if admin() && resource.data.active == true && request.resource.data.active == false
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active']);
+      allow delete: if false;
+    }
+    match /memberships/{membershipId} {
+      allow read: if staff() || (customerAccessAllowed() && resource.data.tenantId == customerId());
+      allow create: if permitted('customers') && permitted('money')
+        && request.resource.data.keys().hasOnly(['tenantId', 'tenantName', 'planId', 'planName', 'monthlyFee', 'start', 'end', 'seat', 'invoiceMonths', 'createdAt', 'createdBy'])
+        && request.resource.data.createdAt == request.time && request.resource.data.createdBy == request.auth.uid
+        && optionalString(request.resource.data, 'tenantName', 120) && optionalString(request.resource.data, 'planName', 120)
+        && optionalString(request.resource.data, 'seat', 80)
+        && validDay(request.resource.data.start) && request.resource.data.start.matches('^[0-9]{4}-(0[1-9]|1[0-2])-01$')
+        && validDay(request.resource.data.end) && request.resource.data.start <= request.resource.data.end
+        && request.resource.data.start > get(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId)).data.get('membershipEnd', '')
+        && get(/databases/$(database)/documents/membershipPlans/$(request.resource.data.planId)).data.active == true
+        && request.resource.data.planName == get(/databases/$(database)/documents/membershipPlans/$(request.resource.data.planId)).data.name
+        && request.resource.data.monthlyFee == get(/databases/$(database)/documents/membershipPlans/$(request.resource.data.planId)).data.monthlyFee
+        && request.resource.data.invoiceMonths is list
+        && request.resource.data.invoiceMonths.size() == get(/databases/$(database)/documents/membershipPlans/$(request.resource.data.planId)).data.months
+        && getAfter(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId)).data.membershipId == membershipId
+        && getAfter(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId)).data.membershipEnd == request.resource.data.end
+        && getAfter(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId)).data.moveOutDate == request.resource.data.end
+        && getAfter(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId)).data.room == request.resource.data.seat;
+      allow update, delete: if false;
+    }
+    match /agreements/{agreementId} {
+      allow read: if staff() || (customerAccessAllowed() && resource.data.tenantId == customerId());
+      allow create: if permitted('customers')
+        && request.resource.data.keys().hasOnly(['tenantId', 'tenantName', 'businessName', 'address', 'room', 'fee', 'start', 'end', 'terms', 'status', 'createdAt', 'createdBy'])
+        && exists(/databases/$(database)/documents/tenants/$(request.resource.data.tenantId))
+        && optionalString(request.resource.data, 'tenantName', 120) && optionalString(request.resource.data, 'businessName', 120)
+        && optionalString(request.resource.data, 'address', 500) && optionalString(request.resource.data, 'room', 80)
+        && optionalString(request.resource.data, 'start', 30) && optionalString(request.resource.data, 'end', 30)
+        && validSettingAmount(request.resource.data.fee, 10000000)
+        && request.resource.data.terms is string && request.resource.data.terms.size() > 0 && request.resource.data.terms.size() <= 10000
+        && request.resource.data.status == 'Draft' && request.resource.data.createdAt == request.time && request.resource.data.createdBy == request.auth.uid;
+      allow update: if permitted('customers') && resource.data.status == 'Draft' && request.resource.data.status == 'Accepted'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'signedPhoto', 'acceptedAt', 'acceptedBy', 'acceptanceName'])
+        && request.resource.data.acceptedAt == request.time && request.resource.data.acceptedBy == request.auth.uid
+        && request.resource.data.acceptanceName is string && request.resource.data.acceptanceName.size() > 0 && request.resource.data.acceptanceName.size() <= 120
+        && request.resource.data.signedPhoto is string && request.resource.data.signedPhoto.matches('^data:image/jpeg;base64,.*$') && request.resource.data.signedPhoto.size() <= 610000;
+      allow delete: if false;
     }
 
     match /{document=**} {

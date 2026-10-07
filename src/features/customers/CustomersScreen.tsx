@@ -25,16 +25,18 @@ import { auth, db, getProvisioningAuth } from '../../lib/firebase/client';
 import { TextField } from '../../shared/components/TextField';
 import { useFirestoreCollection } from '../../shared/hooks/useFirestoreCollection';
 import { useRealtimeClock } from '../../shared/hooks/useRealtimeClock';
-import type { InvoiceRecord, MeterReadingRecord, PaymentRecord, SettlementRecord, TenantRecord } from '../../shared/types/records';
-import { toNumber } from '../../shared/utils/money';
+import type { DepositAccount, InvoiceRecord, MeterReadingRecord, PaymentRecord, SettlementRecord, TenantRecord } from '../../shared/types/records';
+import { roundMoney, toNumber } from '../../shared/utils/money';
 import { useLanguage } from '../../shared/i18n/LanguageProvider';
+import { getRoomNumbers, getSeatNumbers } from './businessConfig';
+import { useBusinessSettings } from '../settings/BusinessSettingsProvider';
 import { businessTypeOptions, getBusinessType } from './businessTypes';
 import { getStartNowStatus } from './customerLifecycle';
 import { CustomerCard } from './CustomerCard';
 import { customerStatusOptions, getCustomerName, getCustomerStatus, getCustomerStatusGroup, matchesCustomerSearch } from './customerUtils';
 import { FilterPill } from './FilterPill';
 import { LifecycleMeterSheet, type LifecycleMeterResult } from './LifecycleMeterSheet';
-import { getAllocationKey, getRoomOccupancy, getRoomSummary, normalizeLibrarySeat, parseRoomLabel, roomNumbers, staysOverlap } from './roomUtils';
+import { canAllocateCustomer, getAllocationKey, getRoomOccupancy, getRoomSummary, normalizeLibrarySeat, parseRoomLabel, staysOverlap } from './roomUtils';
 import { calculateOutstandingBalance, calculateSettlement, getCollectedTotal, getDayKey, getMeterChargeForMonth, getMonthKey, matchesDailyStayAction, meterReadingNeedsReview } from '../operations/operationsMath';
 import { syncAllocationGuard } from './allocationTransactions';
 import { CheckoutSettlementSheet, type CheckoutSettlementDraft } from './CheckoutSettlementSheet';
@@ -157,16 +159,19 @@ function needsCustomerAttention(customer: TenantRecord) {
 }
 
 export function CustomersScreen({
+  initialCustomerId = '',
   initialActionFilter = '',
   initialMode = 'All',
   initialStatusFilter = '',
   isAdmin,
 }: {
+  initialCustomerId?: string;
   initialActionFilter?: string;
   initialMode?: string;
   initialStatusFilter?: string;
   isAdmin: boolean;
 }) {
+  const { settings, can } = useBusinessSettings();
   const { colors } = useAppTheme();
   const { t } = useLanguage();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -183,7 +188,7 @@ export function CustomersScreen({
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter);
   const [mode, setMode] = useState(initialMode);
   const [selectedRoom, setSelectedRoom] = useState('');
-  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState(initialCustomerId);
   const [editingCustomer, setEditingCustomer] = useState<TenantRecord | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -198,6 +203,7 @@ export function CustomersScreen({
   const [pendingMeterLifecycle, setPendingMeterLifecycle] = useState<PendingMeterLifecycle | null>(null);
   const [pendingSettlement, setPendingSettlement] = useState<PendingSettlement | null>(null);
   const [savingSettlement, setSavingSettlement] = useState(false);
+  const deposits = useFirestoreCollection<DepositAccount>('depositAccounts');
   const settlementPreview = useMemo(() => {
     if (!pendingSettlement) return { automaticCharge: 0, ledgerBalance: 0, month: getMonthKey() };
 
@@ -205,14 +211,14 @@ export function CustomersScreen({
     const units = pendingSettlement.meterResult
       ? Math.max(0, pendingSettlement.meterResult.reading - pendingSettlement.minimumReading)
       : 0;
-    const meterCharge = units * 10;
+    const meterCharge = roundMoney(units * settings.meterRate);
     const previewReadings = pendingSettlement.meterResult ? [...meterReadings.data, {
       id: 'checkout-preview',
       billAmount: meterCharge,
       currentReading: pendingSettlement.meterResult.reading,
       month,
       previousReading: pendingSettlement.minimumReading,
-      ratePerUnit: 10,
+      ratePerUnit: settings.meterRate,
       readingType: 'check-out' as const,
       tenantId: pendingSettlement.customer.id,
       unitsConsumed: units,
@@ -234,9 +240,9 @@ export function CustomersScreen({
       ),
       month,
     };
-  }, [invoices.data, meterReadings.data, now, payments.data, pendingSettlement, settlements.data]);
-  const roomSummary = useMemo(() => getRoomSummary(tenants.data, now), [now, tenants.data]);
-  const roomOccupancy = useMemo(() => getRoomOccupancy(tenants.data, now), [now, tenants.data]);
+  }, [invoices.data, meterReadings.data, now, payments.data, pendingSettlement, settlements.data, settings.meterRate]);
+  const roomSummary = useMemo(() => getRoomSummary(tenants.data, now, settings), [now, tenants.data, settings]);
+  const roomOccupancy = useMemo(() => getRoomOccupancy(tenants.data, now, settings), [now, tenants.data, settings]);
   const filtered = useMemo(
     () =>
       tenants.data.filter((tenant) => {
@@ -271,6 +277,7 @@ export function CustomersScreen({
   }
 
   async function saveCustomer(payload: CustomerDraft) {
+    if (editingCustomer?.membershipManaged && ['businessType', 'moveOutDate', 'rent'].some((field) => String(payload[field as keyof CustomerDraft] ?? '') !== String(editingCustomer[field] ?? ''))) return t('Use Memberships to change the membership period or plan.');
     const previousStatus = editingCustomer ? getCustomerStatus(editingCustomer) : '';
     const requiresInitialMeter = !editingCustomer && payload.businessType === 'pg' && payload.status === 'checked in';
     const savedPayload = requiresInitialMeter ? { ...payload, status: 'booked' } : payload;
@@ -579,7 +586,7 @@ export function CustomersScreen({
       await runTransaction(db, async (transaction) => {
         await syncAllocationGuard(transaction, customer.id, customer, nextCustomer, tenants.data);
         transaction.set(readingRef, {
-          billAmount: unitsConsumed * 10,
+          billAmount: roundMoney(unitsConsumed * settings.meterRate),
           createdAt: serverTimestamp(),
           currentReading: result.reading,
           month: `${eventTime.getFullYear()}-${String(eventTime.getMonth() + 1).padStart(2, '0')}`,
@@ -588,7 +595,7 @@ export function CustomersScreen({
           photo: result.photo,
           photoSize: result.photoSize,
           previousReading: minimumReading,
-          ratePerUnit: 10,
+          ratePerUnit: settings.meterRate,
           readingSource: `ocr-confirmed-${result.photoSource}`,
           readingType: action,
           tenantId: customer.id,
@@ -666,6 +673,7 @@ export function CustomersScreen({
 
   async function finalizeCheckout(draft: CheckoutSettlementDraft) {
     if (!pendingSettlement) return;
+    if (deposits.loading || deposits.error) return setActionError(t('Wait for the deposit ledger to load.'));
     const actorUid = auth.currentUser?.uid;
     if (!actorUid) return setActionError(t('Please sign in again.'));
 
@@ -691,12 +699,20 @@ export function CustomersScreen({
     setActionError('');
     try {
       await runTransaction(db, async (transaction) => {
+        const depositRef = doc(db, 'depositAccounts', customer.id);
+        const deposit = await transaction.get(depositRef);
+        if (deposit.exists() && deposit.data().held !== draft.depositHeld) throw new Error('Deposit changed. Reopen checkout before continuing.');
         await syncAllocationGuard(transaction, customer.id, customer, nextCustomer, tenants.data);
+        if (deposit.exists()) {
+          const eventRef = doc(collection(db, 'depositEvents'));
+          transaction.set(depositRef, { tenantId: customer.id, held: 0, eventId: eventRef.id, updatedAt: serverTimestamp(), updatedBy: actorUid });
+          transaction.set(eventRef, { tenantId: customer.id, tenantName: getCustomerName(customer), kind: 'application', amount: draft.depositHeld, before: draft.depositHeld, after: 0, paymentMode: 'Cash', reference: '', note: 'Deposit transferred to checkout settlement: applied to due or reserved for refund', createdAt: serverTimestamp(), createdBy: actorUid });
+        }
 
         if (meterResult) {
           const unitsConsumed = Math.max(0, meterResult.reading - minimumReading);
           transaction.set(readingRef, {
-            billAmount: unitsConsumed * 10,
+            billAmount: roundMoney(unitsConsumed * settings.meterRate),
             createdAt: serverTimestamp(),
             currentReading: meterResult.reading,
             month: settlementPreview.month,
@@ -705,7 +721,7 @@ export function CustomersScreen({
             photo: meterResult.photo,
             photoSize: meterResult.photoSize,
             previousReading: minimumReading,
-            ratePerUnit: 10,
+            ratePerUnit: settings.meterRate,
             readingSource: `ocr-confirmed-${meterResult.photoSource}`,
             readingType: 'check-out',
             tenantId: customer.id,
@@ -723,6 +739,7 @@ export function CustomersScreen({
             createdAt: serverTimestamp(),
             createdBy: actorUid,
             month: settlementPreview.month,
+            paymentMode: draft.paymentMode, reference: draft.reference, collectedBy: actorUid,
             note: 'Checkout settlement',
             paidOn: eventTime.toLocaleDateString('en-IN'),
             status: 'Recorded',
@@ -878,6 +895,7 @@ export function CustomersScreen({
       ) : null}
       {pendingSettlement ? (
         <CheckoutSettlementSheet
+          heldDeposit={deposits.data.find((item) => item.id === pendingSettlement.customer.id)?.held}
           automaticCharge={settlementPreview.automaticCharge}
           customer={pendingSettlement.customer}
           ledgerBalance={settlementPreview.ledgerBalance}
@@ -939,7 +957,7 @@ export function CustomersScreen({
             const roomLabel = room.businessType === 'hotel'
               ? 'Hotel occupied'
               : room.businessType === 'pg'
-                ? room.availableBeds > 0 ? 'PG - 1 spot left' : 'PG full'
+                ? room.availableBeds > 0 ? `${t('PG')} · ${room.availableBeds} ${t('spots open')}` : 'PG full'
                 : 'Available';
 
             return <Pressable
@@ -1044,7 +1062,7 @@ export function CustomersScreen({
               onEdit={() => openEditForm(tenant)}
               onInvite={isAdmin && getCustomerStatusGroup(tenant) !== 'cancelled' && tenant.accessStatus !== 'suspended' && tenant.accessStatus !== 'revoked' ? () => shareCustomerAccess(tenant) : undefined}
               onCheckIn={() => confirmCheckIn(tenant)}
-              onCheckOut={() => confirmCheckOut(tenant)}
+              onCheckOut={can('money') ? () => confirmCheckOut(tenant) : undefined}
               onToggle={() => setSelectedCustomerId((current) => current === tenant.id ? '' : tenant.id)}
               onViewIdProof={() => setViewingProof(tenant)}
             />
@@ -1108,6 +1126,7 @@ function CustomerFormSheet({
   saving: boolean;
   styles: ReturnType<typeof createStyles>;
 }) {
+  const { settings } = useBusinessSettings();
   const { t } = useLanguage();
   const [form, setForm] = useState(() => ({
     ...initialForm,
@@ -1132,7 +1151,7 @@ function CustomerFormSheet({
     moveOutTime: customer?.moveOutTime || '11:00',
     name: customer?.name || customer?.fullName || customer?.tenantName || '',
     phone: customer?.phone || '',
-    rent: customer?.rent ? String(customer.rent) : '',
+    rent: customer ? String(customer.rent ?? '') : settings.defaultPgRent ? String(settings.defaultPgRent) : '',
     room: customer?.room || '',
     roomType: customer?.roomType || 'single',
     services: Array.isArray(customer?.services) ? customer.services : [],
@@ -1140,11 +1159,11 @@ function CustomerFormSheet({
   }));
   const [formError, setFormError] = useState('');
   const [formStep, setFormStep] = useState<CustomerFormStep>('business');
-  const activeType = getBusinessType(form.businessType);
+  const activeType = { ...getBusinessType(form.businessType), allocationCapacity: form.businessType === 'pg' ? settings.pgCapacity : 1 };
   const selectedDocument = documentTypes.find((item) => item.value === form.documentType) || documentTypes[0];
   const currentAllocation = getAllocationKey(customer?.room, form.businessType);
   const draftStay = { id: customer?.id || 'draft', ...form } as TenantRecord;
-  const allocationNumbers = form.businessType === 'library' ? [] : roomNumbers;
+  const allocationNumbers = form.businessType === 'library' ? getSeatNumbers(settings) : getRoomNumbers(settings);
   const allocationOccupants = customers.filter((item) => {
     const itemType = String(item.businessType || 'pg');
     const sameInventory = form.businessType === 'library'
@@ -1162,7 +1181,7 @@ function CustomerFormSheet({
       const occupants = allocationOccupants.filter((item) => getAllocationKey(item.room, form.businessType) === allocation);
       const isCurrent = currentAllocation === allocation;
       const hasConflictingBusiness = occupants.some((item) => String(item.businessType || 'pg') !== form.businessType);
-      const vacantSeats = hasConflictingBusiness ? 0 : Math.max(0, activeType.allocationCapacity - occupants.length);
+      const vacantSeats = hasConflictingBusiness || !canAllocateCustomer(draftStay, occupants, settings.pgCapacity) ? 0 : Math.max(1, activeType.allocationCapacity - occupants.length);
 
       return {
         allocation,
@@ -1177,16 +1196,15 @@ function CustomerFormSheet({
   const selectedAllocationOccupants = selectedAllocation
     ? allocationOccupants.filter((item) => getAllocationKey(item.room, form.businessType) === selectedAllocation)
     : [];
-  const selectedAllocationOpenSpots = Math.max(0, activeType.allocationCapacity - selectedAllocationOccupants.length);
   const selectedRoomHasConflictingBusiness = form.businessType !== 'library' && selectedAllocationOccupants.some(
     (item) => String(item.businessType || 'pg') !== form.businessType,
   );
   const selectedAllocationIsCurrent = Boolean(selectedAllocation && currentAllocation === selectedAllocation);
   const selectedRoomAvailable = form.businessType === 'library'
     || selectedAllocationIsCurrent
-    || (!selectedRoomHasConflictingBusiness && selectedAllocationOpenSpots > 0);
-  const librarySeatAvailable = form.businessType !== 'library' || selectedAllocationIsCurrent || selectedAllocationOpenSpots > 0;
-  const librarySeatLooksValid = form.businessType !== 'library' || !selectedAllocation || /^[A-Z]\d{2,3}$/.test(selectedAllocation);
+    || (getRoomNumbers(settings).includes(selectedAllocation) && !selectedRoomHasConflictingBusiness && canAllocateCustomer(draftStay, selectedAllocationOccupants, settings.pgCapacity));
+  const librarySeatAvailable = form.businessType !== 'library' || canAllocateCustomer(draftStay, selectedAllocationOccupants, settings.pgCapacity);
+  const librarySeatLooksValid = form.businessType !== 'library' || !selectedAllocation || selectedAllocationIsCurrent || getSeatNumbers(settings).includes(selectedAllocation);
   const canContinueAllocation = Boolean(form.name.trim() && form.phone.trim() && form.room.trim() && toNumber(form.rent));
   const roomLifecycleBusiness = ['pg', 'hotel'].includes(form.businessType);
   const visibleStatusOptions = !customer
@@ -1218,6 +1236,7 @@ function CustomerFormSheet({
     setForm((current) => ({
       ...current,
       businessType: type,
+      ...(!customer ? { rent: String(type === 'pg' ? settings.defaultPgRent || '' : type === 'hotel' ? settings.defaultHotelCharge || '' : settings.defaultLibraryFee || '') } : {}),
       room: '',
       roomType: 'single',
       services: current.services.filter((service) => nextType.services.includes(service)),
@@ -1241,7 +1260,7 @@ function CustomerFormSheet({
 
     if (nextStep === 'details' && !librarySeatLooksValid) {
       setFormStep('allocation');
-      setFormError(t('Enter a valid seat like A01, B12, or C08.'));
+      setFormError(t('Choose a seat within the configured library inventory.'));
       return;
     }
 
@@ -1275,7 +1294,7 @@ function CustomerFormSheet({
       }
 
       if (!librarySeatLooksValid) {
-        setFormError(t('Enter a valid seat like A01, B12, or C08.'));
+        setFormError(t('Choose a seat within the configured library inventory.'));
         return;
       }
 
@@ -1460,7 +1479,7 @@ function CustomerFormSheet({
 
     if (!librarySeatLooksValid) {
       setFormStep('allocation');
-      setFormError(t('Enter a valid seat like A01, B12, or C08.'));
+      setFormError(t('Choose a seat within the configured library inventory.'));
       return;
     }
 
@@ -1684,7 +1703,7 @@ function CustomerFormSheet({
                       autoCapitalize="characters"
                       label="Seat number"
                       onChangeText={updateLibrarySeat}
-                      placeholder="A01, B12, C08..."
+                      placeholder={`${settings.seatPrefix}01–${settings.seatPrefix}${String(settings.seatCount).padStart(2, '0')}`}
                       value={selectedAllocation}
                     />
                     {selectedAllocation ? (

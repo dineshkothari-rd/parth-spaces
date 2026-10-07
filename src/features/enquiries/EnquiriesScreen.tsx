@@ -11,6 +11,7 @@ import { businessTypeOptions, getBusinessType } from '../customers/businessTypes
 import { FilterPill } from '../customers/FilterPill';
 import { editableEnquiryStatuses, enquiryStatuses } from './enquiryStatuses';
 import { useLanguage } from '../../shared/i18n/LanguageProvider';
+import { useBusinessSettings } from '../settings/BusinessSettingsProvider';
 
 function getStatus(enquiry: EnquiryRecord) {
   return enquiry.status || 'New';
@@ -75,6 +76,7 @@ function openLink(url: string) {
 }
 
 export function EnquiriesScreen() {
+  const { settings, can } = useBusinessSettings();
   const { colors } = useAppTheme();
   const { t } = useLanguage();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -156,7 +158,7 @@ export function EnquiriesScreen() {
           moveOutTime: '11:00',
           name: enquiry.name || t('Unnamed enquiry'),
           phone: enquiry.phone || '',
-          rent: 0,
+          rent: businessType === 'pg' ? settings.defaultPgRent : businessType === 'hotel' ? settings.defaultHotelCharge : settings.defaultLibraryFee,
           room: '',
           roomType: enquiry.roomType || '',
           services: [],
@@ -236,7 +238,7 @@ export function EnquiriesScreen() {
             busy={busyId === enquiry.id}
             enquiry={enquiry}
             key={enquiry.id}
-            onConvert={() => convertEnquiry(enquiry)}
+            onConvert={can('customers') ? () => convertEnquiry(enquiry) : undefined}
             onDelete={() => confirmDelete(enquiry)}
             onStatusChange={(status) => updateStatus(enquiry, status)}
             styles={styles}
@@ -270,7 +272,7 @@ function EnquiryCard({
   busy: boolean;
   converting: boolean;
   enquiry: EnquiryRecord;
-  onConvert: () => void;
+  onConvert?: () => void;
   onDelete: () => void;
   onStatusChange: (status: string) => void;
   styles: ReturnType<typeof createStyles>;
@@ -340,7 +342,7 @@ function EnquiryCard({
         <Pressable disabled={!phone} onPress={() => openLink(`https://wa.me/${phone}?text=${whatsappMessage}`)} style={[styles.actionButton, styles.actionButtonAccent, !phone && styles.disabled]}>
           <Text style={styles.actionText}>{t('WhatsApp')}</Text>
         </Pressable>
-        <Pressable disabled={busy || converting || converted} onPress={onConvert} style={[styles.actionButton, styles.actionButtonSurface, (busy || converting || converted) && styles.disabled]}>
+        <Pressable disabled={!onConvert || busy || converting || converted} onPress={onConvert} style={[styles.actionButton, styles.actionButtonSurface, (!onConvert || busy || converting || converted) && styles.disabled]}>
           <Text style={styles.actionTextAlt}>{t(converted ? 'Converted' : converting ? 'Converting...' : 'Convert')}</Text>
         </Pressable>
       </View>

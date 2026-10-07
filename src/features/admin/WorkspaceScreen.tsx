@@ -13,6 +13,7 @@ import type { AdminProfile } from '../../shared/types/admin';
 import { AppBadge } from '../../shared/components/AppBadge';
 import { ModuleCard } from '../../shared/components/ModuleCard';
 import { useLanguage } from '../../shared/i18n/LanguageProvider';
+import { useBusinessSettings } from '../settings/BusinessSettingsProvider';
 import { FirestoreRefreshContext } from '../../shared/hooks/useFirestoreCollection';
 import { db } from '../../lib/firebase/client';
 
@@ -31,9 +32,10 @@ type WorkspaceScreenProps = {
 export function WorkspaceScreen({ admin, onSignOut }: WorkspaceScreenProps) {
   const [activeTab, setActiveTab] = useState('overview');
   const [moreView, setMoreView] = useState<MoreView>('enquiries');
-  const [customerStart, setCustomerStart] = useState({ action: '', mode: 'All', status: '' });
+  const [customerStart, setCustomerStart] = useState({ action: '', mode: 'All', status: '', customerId: '' });
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const { settings, can } = useBusinessSettings();
   const { colors } = useAppTheme();
   const { t } = useLanguage();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -47,6 +49,7 @@ export function WorkspaceScreen({ admin, onSignOut }: WorkspaceScreenProps) {
       updatedAt: serverTimestamp(),
     }).catch(() => undefined);
   }, [admin.accessStatus, admin.role, admin.uid]);
+  const visibleTab = (activeTab === 'tenants' && !can('customers')) || (activeTab === 'payments' && !can('money')) ? 'overview' : activeTab;
   const activeModules = useMemo(() => {
     if (activeTab === 'overview') return featureModules;
     if (activeTab === 'more') return featureModules.filter((feature) => !['overview', 'tenants', 'payments'].includes(feature.id));
@@ -60,14 +63,15 @@ export function WorkspaceScreen({ admin, onSignOut }: WorkspaceScreenProps) {
   }
 
   function openDestination(destination: OverviewDestination) {
+    if ((['arrivals', 'attention', 'customers', 'departures', 'meter'].includes(destination) && !can('customers')) || (destination === 'money' && !can('money')) || (destination === 'enquiries' && !can('operations'))) return;
     if (destination === 'arrivals' || destination === 'attention' || destination === 'customers' || destination === 'departures') {
       setCustomerStart(destination === 'arrivals'
-        ? { action: 'arrival', mode: 'All', status: 'reserved' }
+        ? { action: 'arrival', mode: 'All', status: 'reserved', customerId: '' }
         : destination === 'departures'
-          ? { action: 'departure', mode: 'All', status: 'active' }
+          ? { action: 'departure', mode: 'All', status: 'active', customerId: '' }
           : destination === 'attention'
-            ? { action: '', mode: 'Needs attention', status: '' }
-            : { action: '', mode: 'All', status: '' });
+            ? { action: '', mode: 'Needs attention', status: '', customerId: '' }
+            : { action: '', mode: 'All', status: '', customerId: '' });
       setActiveTab('tenants');
       return;
     }
@@ -86,10 +90,10 @@ export function WorkspaceScreen({ admin, onSignOut }: WorkspaceScreenProps) {
       <View style={[styles.header, { paddingTop: Math.max(insets.top + spacing.sm, spacing.lg) }]}>
         <View style={styles.brandRow}>
           <View style={styles.brandMark}>
-            <Text style={styles.brandMarkText}>K</Text>
+            <Text style={styles.brandMarkText}>{settings.name.charAt(0).toUpperCase()}</Text>
           </View>
           <View style={styles.headerCopy}>
-            <Text style={styles.eyebrow}>Kothari · {t(admin.role === 'admin' ? 'Admin' : 'Staff')}</Text>
+            <Text style={styles.eyebrow}>{settings.name} · {t(admin.role === 'admin' ? 'Admin' : 'Staff')}</Text>
             <Text style={styles.title}>{t('Hi')}, {admin.name}</Text>
           </View>
         </View>
@@ -106,14 +110,14 @@ export function WorkspaceScreen({ admin, onSignOut }: WorkspaceScreenProps) {
           refreshControl={<RefreshControl colors={[colors.brand]} onRefresh={refreshPage} refreshing={refreshing} tintColor={colors.brand} />}
           style={styles.scroller}
         >
-          {activeTab === 'overview' ? (
+          {visibleTab === 'overview' ? (
             <OperationsOverviewScreen onNavigate={openDestination} />
-          ) : activeTab === 'tenants' ? (
-            <CustomersScreen initialActionFilter={customerStart.action} initialMode={customerStart.mode} initialStatusFilter={customerStart.status} isAdmin={admin.role === 'admin'} />
-          ) : activeTab === 'payments' ? (
+          ) : visibleTab === 'tenants' && can('customers') ? (
+            <CustomersScreen key={`${customerStart.customerId}-${customerStart.action}-${customerStart.mode}`} initialCustomerId={customerStart.customerId} initialActionFilter={customerStart.action} initialMode={customerStart.mode} initialStatusFilter={customerStart.status} isAdmin={admin.role === 'admin'} />
+          ) : visibleTab === 'payments' && can('money') ? (
             <MoneyScreen />
-          ) : activeTab === 'more' ? (
-            <MoreScreen isAdmin={admin.role === 'admin'} onViewChange={setMoreView} view={moreView} />
+          ) : visibleTab === 'more' ? (
+            <MoreScreen onCheckout={(customerId) => { setCustomerStart({ action: '', mode: 'All', status: '', customerId }); setActiveTab('tenants'); }} isAdmin={admin.role === 'admin'} onViewChange={setMoreView} view={moreView} />
           ) : (
             <>
               <View style={styles.heroPanel}>
@@ -138,15 +142,15 @@ export function WorkspaceScreen({ admin, onSignOut }: WorkspaceScreenProps) {
 
       <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, Platform.OS === 'android' ? 48 : spacing.sm) }]}>
         <View style={styles.nav}>
-          {primaryTabs.map((tab) => {
-            const active = tab.id === activeTab;
+          {primaryTabs.filter((tab) => tab.id !== 'tenants' || can('customers')).filter((tab) => tab.id !== 'payments' || can('money')).map((tab) => {
+            const active = tab.id === visibleTab;
 
             return (
               <Pressable
                 accessibilityRole="button"
                 key={tab.id}
                 onPress={() => {
-                  if (tab.id === 'tenants') setCustomerStart({ action: '', mode: 'All', status: '' });
+                  if (tab.id === 'tenants') setCustomerStart({ action: '', mode: 'All', status: '', customerId: '' });
                   setActiveTab(tab.id);
                 }}
                 style={[styles.navItem, active && styles.navItemActive]}

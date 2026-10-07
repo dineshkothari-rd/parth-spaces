@@ -9,7 +9,7 @@ type BaseProfile = {
   uid: string;
 };
 
-export type AdminProfile = BaseProfile & { accessStatus: AccountAccessStatus; role: 'admin' | 'staff' };
+export type AdminProfile = BaseProfile & { accessStatus: AccountAccessStatus; role: 'admin' | 'staff'; permissions?: Partial<Record<'customers' | 'money' | 'operations', boolean>> };
 export type CustomerProfile = BaseProfile & {
   accessStatus: AccountAccessStatus;
   customerId: string;

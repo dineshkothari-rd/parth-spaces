@@ -22,6 +22,8 @@ import { money, toNumber } from '../../shared/utils/money';
 import { useLanguage } from '../../shared/i18n/LanguageProvider';
 import { FilterPill } from '../customers/FilterPill';
 import { getCollectedTotal, getExpenseAmount, getMonthDisplay, isVoided, matchesMonth } from '../operations/operationsMath';
+import { parseAmount, paymentModes, validatePaymentDetails } from './financeMath';
+import { getDayKey } from '../operations/operationsMath';
 import { editableExpenseCategories, expenseCategories, getExpenseCategory } from './expenseCategories';
 
 type ExpenseDraft = {
@@ -30,6 +32,7 @@ type ExpenseDraft = {
   date: string;
   note: string;
   paymentMode: string;
+  reference: string;
   title: string;
 };
 
@@ -240,12 +243,17 @@ function ExpenseFormSheet({
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('maintenance');
   const [date, setDate] = useState(`${month}-${String(new Date().getDate()).padStart(2, '0')}`);
-  const [paymentMode, setPaymentMode] = useState('');
+  const [paymentMode, setPaymentMode] = useState('Cash');
+  const [reference, setReference] = useState('');
   const [note, setNote] = useState('');
   const [formError, setFormError] = useState('');
 
   function submit() {
-    const parsedAmount = toNumber(amount);
+    let parsedAmount: number;
+    try {
+      parsedAmount = parseAmount(amount); validatePaymentDetails(paymentMode, reference);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || getDayKey(new Date(`${date}T12:00:00`)) !== date) throw new Error('Enter a valid date as YYYY-MM-DD.');
+    } catch (error) { setFormError(error instanceof Error ? error.message : 'Invalid expense.'); return; }
 
     if (!title.trim()) {
       setFormError(t('Expense title is required.'));
@@ -267,7 +275,7 @@ function ExpenseFormSheet({
       category,
       date: date.trim() || todayKey(),
       note: note.trim(),
-      paymentMode: paymentMode.trim(),
+      paymentMode, reference: reference.trim(),
       title: title.trim(),
     });
   }
@@ -301,7 +309,8 @@ function ExpenseFormSheet({
               <TextField label="Title" onChangeText={setTitle} placeholder="Electricity bill" value={title} />
               <TextField keyboardType="numeric" label="Amount" onChangeText={setAmount} placeholder="2500" value={amount} />
               <TextField label="Date" onChangeText={setDate} placeholder="YYYY-MM-DD" value={date} />
-              <TextField label="Payment mode" onChangeText={setPaymentMode} placeholder="Cash, UPI, bank transfer..." value={paymentMode} />
+              <View style={{ flexDirection: 'row', gap: 8 }}>{paymentModes.map((mode) => <FilterPill key={mode} label={mode} active={paymentMode === mode} onPress={() => setPaymentMode(mode)} />)}</View>
+              <TextField label="Transaction reference" value={reference} onChangeText={setReference} maxLength={120} />
               <TextField label="Note" multiline onChangeText={setNote} placeholder="Optional note" value={note} />
             </View>
 

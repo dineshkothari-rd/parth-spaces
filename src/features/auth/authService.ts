@@ -42,7 +42,7 @@ export async function getAppProfile(user: User | null): Promise<AppProfile | nul
       return customerId ? { ...base, accessStatus: getAccountAccessStatus(data?.accessStatus, 'invited'), customerId, role } : null;
     }
 
-    return { ...base, accessStatus: getAccountAccessStatus(data?.accessStatus, 'active'), role };
+    return { ...base, accessStatus: getAccountAccessStatus(data?.accessStatus, 'active'), role, permissions: data?.permissions };
   }
 
   // Keep existing admin accounts working while roles are provisioned server-side.

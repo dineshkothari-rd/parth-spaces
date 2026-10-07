@@ -62,6 +62,9 @@ export type TenantRecord = FirestoreRecord & {
 export type PaymentRecord = FirestoreRecord & {
   amount?: number | string;
   amountPaid?: number | string;
+  paymentMode?: string;
+  reference?: string;
+  collectedBy?: string;
   balance?: number | string;
   month?: string;
   name?: string;
@@ -89,6 +92,10 @@ export type PaymentRecord = FirestoreRecord & {
 };
 
 export type InvoiceRecord = FirestoreRecord & {
+  extraCharge?: number;
+  discount?: number;
+  dueDate?: string;
+  note?: string;
   baseAmount: number;
   businessType: string;
   issuedAt?: {
@@ -226,6 +233,10 @@ export type MeterReadingRecord = FirestoreRecord & {
 };
 
 export type DueRecord = {
+  extraCharge?: number;
+  discount?: number;
+  dueDate?: string;
+  note?: string;
   baseAmount: number;
   balance: number;
   businessType: string;
@@ -240,3 +251,56 @@ export type DueRecord = {
   tenantName: string;
   tenantRoom: string;
 };
+
+export interface DepositAccount extends FirestoreRecord {
+  tenantId: string;
+  held: number;
+  eventId: string;
+}
+export interface DepositEvent extends FirestoreRecord {
+  tenantId: string;
+  tenantName: string;
+  kind: 'collection' | 'deduction' | 'refund' | 'application';
+  amount: number;
+  before: number;
+  after: number;
+  paymentMode: string;
+  reference: string;
+  note: string;
+  createdAt?: { seconds?: number };
+  createdBy: string;
+}
+export interface MembershipPlan extends FirestoreRecord {
+  name: string;
+  months: number;
+  monthlyFee: number;
+  active: boolean;
+}
+export interface MembershipRecord extends FirestoreRecord {
+  tenantId: string;
+  tenantName: string;
+  planId: string;
+  planName: string;
+  monthlyFee: number;
+  start: string;
+  end: string;
+  seat: string;
+  invoiceMonths: string[];
+}
+export interface AgreementRecord extends FirestoreRecord {
+  tenantId: string;
+  tenantName: string;
+  businessName: string;
+  address: string;
+  room: string;
+  fee: number;
+  start: string;
+  end: string;
+  terms: string;
+  status: 'Draft' | 'Accepted';
+  signedPhoto?: string;
+  acceptedAt?: { seconds?: number };
+  acceptedBy?: string;
+  acceptanceName?: string;
+  createdAt?: { seconds?: number };
+}

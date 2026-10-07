@@ -4,21 +4,23 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { radius, spacing, typography, useAppTheme, type AppColors } from '../../design/tokens';
 import { useFirestoreCollection } from '../../shared/hooks/useFirestoreCollection';
 import { useLanguage } from '../../shared/i18n/LanguageProvider';
+import { useBusinessSettings } from '../settings/BusinessSettingsProvider';
 import type { TenantRecord } from '../../shared/types/records';
 import { getCustomerAllocationLabel, getCustomerName, getCustomerStatusLabel } from './customerUtils';
-import { getInventoryCalendar, ROOM_COUNT } from './roomUtils';
+import { getInventoryCalendar } from './roomUtils';
 
 function shiftDate(date: Date, days: number) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }
 
 export function InventoryCalendarScreen() {
+  const { settings } = useBusinessSettings();
   const { colors } = useAppTheme();
   const { t } = useLanguage();
   const styles = createStyles(colors);
   const tenants = useFirestoreCollection<TenantRecord>('tenants', { sortBy: 'createdAt' });
   const [start, setStart] = useState(() => new Date());
-  const days = useMemo(() => getInventoryCalendar(tenants.data, start), [start, tenants.data]);
+  const days = useMemo(() => getInventoryCalendar(tenants.data, start, 7, settings), [start, tenants.data, settings]);
 
   return (
     <View>
@@ -34,7 +36,7 @@ export function InventoryCalendarScreen() {
         <View key={day.dayKey} style={styles.card}>
           <View style={styles.header}>
             <View><Text style={styles.day}>{day.date.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</Text><Text style={styles.date}>{day.dayKey}</Text></View>
-            <Text style={styles.rooms}>{day.occupiedRooms}/{ROOM_COUNT} {t('rooms')}</Text>
+            <Text style={styles.rooms}>{day.occupiedRooms}/{settings.roomCount} {t('rooms')}</Text>
           </View>
           <View style={styles.metrics}>
             <Metric label={t('Open beds')} styles={styles} value={day.openBeds} />

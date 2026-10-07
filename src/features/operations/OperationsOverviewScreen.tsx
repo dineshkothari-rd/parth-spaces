@@ -5,6 +5,7 @@ import { radius, shadow, spacing, typography, useAppTheme, type AppColors } from
 import { useFirestoreCollection } from '../../shared/hooks/useFirestoreCollection';
 import { useRealtimeClock } from '../../shared/hooks/useRealtimeClock';
 import { useLanguage } from '../../shared/i18n/LanguageProvider';
+import { useBusinessSettings } from '../settings/BusinessSettingsProvider';
 import type { EnquiryRecord, ExpenseRecord, InvoiceRecord, MeterReadingRecord, PaymentRecord, TenantRecord } from '../../shared/types/records';
 import { money } from '../../shared/utils/money';
 import { businessTypeOptions } from '../customers/businessTypes';
@@ -33,6 +34,7 @@ const activityDateFields = ['createdAt', 'updatedAt', 'date'];
 export type OverviewDestination = 'arrivals' | 'attention' | 'customers' | 'departures' | 'money' | 'enquiries' | 'meter';
 
 export function OperationsOverviewScreen({ onNavigate }: { onNavigate: (destination: OverviewDestination) => void }) {
+  const { settings } = useBusinessSettings();
   const { colors } = useAppTheme();
   const { t } = useLanguage();
   const styles = useMemo(() => createStyles(colors), [colors]);
@@ -48,7 +50,7 @@ export function OperationsOverviewScreen({ onNavigate }: { onNavigate: (destinat
   const error = tenants.error || payments.error || expenses.error || enquiries.error || meterReadings.error || invoices.error;
   const currentMonth = getMonthKey();
   const today = getDayKey(new Date(now));
-  const roomSummary = useMemo(() => getRoomSummary(tenants.data, now), [now, tenants.data]);
+  const roomSummary = useMemo(() => getRoomSummary(tenants.data, now, settings), [now, tenants.data, settings]);
   const snapshot = useMemo(() => {
     const monthlyPayments = payments.data.filter((payment) => matchesMonth(payment, month, paymentDateFields));
     const monthlyExpenses = expenses.data.filter((expense) => matchesMonth(expense, month, expenseDateFields));
