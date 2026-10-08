@@ -38,6 +38,7 @@ import { FilterPill } from './FilterPill';
 import { LifecycleMeterSheet, type LifecycleMeterResult } from './LifecycleMeterSheet';
 import { canAllocateCustomer, getAllocationKey, getRoomOccupancy, getRoomSummary, normalizeLibrarySeat, parseRoomLabel, staysOverlap } from './roomUtils';
 import { calculateOutstandingBalance, calculateSettlement, getCollectedTotal, getDayKey, getMeterChargeForMonth, getMonthKey, matchesDailyStayAction, meterReadingNeedsReview } from '../operations/operationsMath';
+import { assertCheckoutPayments } from '../money/paymentTransactions';
 import { syncAllocationGuard } from './allocationTransactions';
 import { CheckoutSettlementSheet, type CheckoutSettlementDraft } from './CheckoutSettlementSheet';
 
@@ -702,6 +703,7 @@ export function CustomersScreen({
         const depositRef = doc(db, 'depositAccounts', customer.id);
         const deposit = await transaction.get(depositRef);
         if (deposit.exists() && deposit.data().held !== draft.depositHeld) throw new Error('Deposit changed. Reopen checkout before continuing.');
+        await assertCheckoutPayments(transaction, db, customer.id, [settlementPreview.month, ...invoices.data.filter(invoice => invoice.tenantId === customer.id).map(invoice => invoice.month)], tenantPayments);
         await syncAllocationGuard(transaction, customer.id, customer, nextCustomer, tenants.data);
         if (deposit.exists()) {
           const eventRef = doc(collection(db, 'depositEvents'));

@@ -17,6 +17,7 @@ export function TextField({ label, placeholder: rawPlaceholder, style, ...props 
     <View style={styles.wrap}>
       <Text style={styles.label}>{t(label)}</Text>
       <TextInput
+        accessibilityLabel={t(label)}
         autoCapitalize="none"
         placeholder={placeholder}
         placeholderTextColor={colors.muted}

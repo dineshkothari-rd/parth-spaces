@@ -88,9 +88,12 @@ test('staff can operate but cannot escalate roles or bypass lifecycle', async ()
   await seed();
   const db = signedIn('staff-1', 'staff');
 
-  await assertSucceeds(setDoc(doc(db, 'payments', 'payment-new'), {
-    amountPaid: 500, balance: 500, businessType: 'pg', createdAt: serverTimestamp(), createdBy: 'staff-1', month: '2026-08', note: '', paidOn: '21/09/2026', status: 'Recorded', tenantId: 'tenant-2', tenantName: 'Customer Two', tenantRoom: 'Room 102', totalRent: 1000,
-  }));
+  const recorded = writeBatch(db);
+  recorded.set(doc(db, 'payments', 'payment-new'), {
+    amountPaid: 500, balance: 700, businessType: 'pg', createdAt: serverTimestamp(), createdBy: 'staff-1', month: '2026-08', note: '', paidOn: '21/09/2026', status: 'Recorded', tenantId: 'tenant-2', tenantName: 'Customer Two', tenantRoom: 'Room 102', totalRent: 1200,
+  });
+  recorded.set(doc(db, 'paymentAccounts', 'tenant-2_2026-08'), {tenantId:'tenant-2',month:'2026-08',paid:500,paymentId:'payment-new',updatedAt:serverTimestamp(),updatedBy:'staff-1'});
+  await assertSucceeds(recorded.commit());
   const invoice = {
     baseAmount: 1000, businessType: 'pg', issuedAt: serverTimestamp(), issuedBy: 'staff-1', meterAmount: 100,
     month: '2026-09', status: 'Issued', tenantId: 'tenant-1', tenantName: 'Customer One', tenantRoom: 'Room 101', total: 1100,
@@ -296,7 +299,10 @@ test('adjusted bills, reconciliation and manual payment references are validated
   await assertFails(updateDoc(doc(db, 'invoices', 'tenant-3_2026-10'), { discount: 100 }));
   const payment = { amountPaid: 100, balance: 450, businessType: 'library', createdAt: serverTimestamp(), createdBy: 'staff-1', collectedBy: 'staff-1', month: '2026-10', note: '', paidOn: '2026-10-06', status: 'Recorded', tenantId: 'tenant-3', tenantName: 'Three', tenantRoom: 'A01', totalRent: 550, paymentMode: 'UPI', reference: '' };
   await assertFails(setDoc(doc(db, 'payments', 'upi'), payment));
-  await assertSucceeds(setDoc(doc(db, 'payments', 'upi'), { ...payment, reference: 'UTR-123' }));
+  const recorded = writeBatch(db);
+  recorded.set(doc(db, 'payments', 'upi'), { ...payment, reference: 'UTR-123' });
+  recorded.set(doc(db, 'paymentAccounts', 'tenant-3_2026-10'), {tenantId:'tenant-3',month:'2026-10',paid:100,paymentId:'upi',updatedAt:serverTimestamp(),updatedBy:'staff-1'});
+  await assertSucceeds(recorded.commit());
   await assertFails(setDoc(doc(db, 'payments', 'forged'), { ...payment, reference: 'UTR', collectedBy: 'admin-1' }));
   const check = { day: '2026-10-06', cashOpening: 50, bankOpening: 0, cashMovement: 100, bankMovement: 0, cashExpected: 150, bankExpected: 0, cashActual: 140, bankActual: 0, cashDifference: -10, bankDifference: 0, note: 'Short', createdAt: serverTimestamp(), createdBy: 'staff-1' };
   await assertSucceeds(setDoc(doc(db, 'reconciliations', 'day'), check));
@@ -383,4 +389,18 @@ test('unknown accounts cannot use claimed roles to read records or create their 
     await assertFails(getDoc(doc(db, 'tenants', 'tenant-1')));
     await assertFails(setDoc(doc(db, 'users', 'unapproved'), { accessStatus: 'active', role: 'admin' }));
   }
+});
+
+test('expense voiding stays independent of monthly payment accounts', async () => {
+  await seed();
+  const db = signedIn('staff-1', 'staff');
+  await testEnv.withSecurityRulesDisabled(async context => {
+    await setDoc(doc(context.firestore(), 'expenses', 'expense-void'), {
+      amount: 100, category: 'maintenance', createdBy: 'staff-1', date: '2026-10-08', note: '', paymentMode: 'Cash', title: 'Repair', status: 'Recorded',
+    });
+  });
+  await assertSucceeds(updateDoc(doc(db, 'expenses', 'expense-void'), {
+    status: 'Voided', updatedAt: serverTimestamp(), voidedAt: serverTimestamp(), voidedBy: 'staff-1',
+  }));
+  await assertFails(updateDoc(doc(db, 'expenses', 'expense-void'), { amount: 1 }));
 });

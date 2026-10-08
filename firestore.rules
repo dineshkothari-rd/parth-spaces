@@ -372,6 +372,39 @@ service cloud.firestore {
       allow delete: if permitted('customers');
     }
 
+    function monthlyPaymentLinked(paymentId) {
+      let payment = request.resource.data;
+      let accountId = payment.tenantId + '_' + payment.month;
+      let account = getAfter(/databases/$(database)/documents/paymentAccounts/$(accountId)).data;
+      let invoice = get(/databases/$(database)/documents/invoices/$(accountId)).data;
+      return account.paymentId == paymentId && account.updatedAt == request.time
+        && payment.totalRent == invoice.total && closeAmount(payment.balance, invoice.total - account.paid);
+    }
+
+    match /paymentAccounts/{accountId} {
+      allow read: if staff();
+      allow create, update: if permitted('money')
+        && request.resource.data.keys().hasOnly(['tenantId', 'month', 'paid', 'paymentId', 'updatedAt', 'updatedBy'])
+        && accountId == request.resource.data.tenantId + '_' + request.resource.data.month
+        && validMonth(request.resource.data.month)
+        && request.resource.data.updatedAt == request.time && request.resource.data.updatedBy == request.auth.uid
+        && validSettingAmount(request.resource.data.paid, 10000000)
+        && request.resource.data.paid <= get(/databases/$(database)/documents/invoices/$(accountId)).data.total
+        && getAfter(/databases/$(database)/documents/payments/$(request.resource.data.paymentId)).data.tenantId == request.resource.data.tenantId
+        && getAfter(/databases/$(database)/documents/payments/$(request.resource.data.paymentId)).data.month == request.resource.data.month
+        && ((getAfter(/databases/$(database)/documents/payments/$(request.resource.data.paymentId)).data.status == 'Recorded'
+          && getAfter(/databases/$(database)/documents/payments/$(request.resource.data.paymentId)).data.createdAt == request.time
+          && request.resource.data.paid >= getAfter(/databases/$(database)/documents/payments/$(request.resource.data.paymentId)).data.amountPaid
+          && (!exists(/databases/$(database)/documents/paymentAccounts/$(accountId))
+            || closeAmount(request.resource.data.paid, resource.data.paid + getAfter(/databases/$(database)/documents/payments/$(request.resource.data.paymentId)).data.amountPaid)))
+          || (exists(/databases/$(database)/documents/paymentAccounts/$(accountId))
+            && get(/databases/$(database)/documents/payments/$(request.resource.data.paymentId)).data.status == 'Recorded'
+            && getAfter(/databases/$(database)/documents/payments/$(request.resource.data.paymentId)).data.status == 'Voided'
+            && getAfter(/databases/$(database)/documents/payments/$(request.resource.data.paymentId)).data.voidedAt == request.time
+            && closeAmount(request.resource.data.paid, resource.data.paid - get(/databases/$(database)/documents/payments/$(request.resource.data.paymentId)).data.amountPaid)));
+      allow delete: if false;
+    }
+
     match /payments/{paymentId} {
       allow read: if staff() || (customerAccessAllowed() && resource.data.tenantId == customerId());
       allow create: if permitted('money')
@@ -381,6 +414,11 @@ service cloud.firestore {
         && request.resource.data.amountPaid is number
         && request.resource.data.amountPaid > 0
         && validPaymentCreate()
+        && ((request.resource.data.note == 'Checkout settlement'
+            && getAfter(/databases/$(database)/documents/settlements/$(request.resource.data.tenantId)).data.finalizedAt == request.time)
+          || (request.resource.data.note == 'Settlement balance'
+            && exists(/databases/$(database)/documents/settlements/$(request.resource.data.tenantId)))
+          || monthlyPaymentLinked(paymentId))
         && (!exists(/databases/$(database)/documents/settlements/$(request.resource.data.tenantId))
           || (request.resource.data.note == 'Settlement balance'
             && request.resource.data.month == get(/databases/$(database)/documents/settlements/$(request.resource.data.tenantId)).data.month
@@ -391,6 +429,9 @@ service cloud.firestore {
         && resource.data.get('status', '') != 'Voided'
         && request.resource.data.status == 'Voided'
         && request.resource.data.voidedBy == request.auth.uid
+        && (!exists(/databases/$(database)/documents/paymentAccounts/$(resource.data.tenantId + '_' + resource.data.get('month', '')))
+          || (getAfter(/databases/$(database)/documents/paymentAccounts/$(resource.data.tenantId + '_' + resource.data.month)).data.paymentId == paymentId
+            && getAfter(/databases/$(database)/documents/paymentAccounts/$(resource.data.tenantId + '_' + resource.data.month)).data.updatedAt == request.time))
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'voidedAt', 'voidedBy']);
       allow delete: if false;
     }

@@ -1,5 +1,5 @@
 import { Alert } from '../../shared/utils/alert';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { downloadPdf, shareCsv } from '../../shared/utils/exportFile';
 import {
   ActivityIndicator,
@@ -40,6 +40,7 @@ import { TextField } from '../../shared/components/TextField';
 import { auth, db } from '../../lib/firebase/client';
 import type { DueRecord, InvoiceRecord, MeterReadingRecord, PaymentRecord, SettlementRecord, TenantRecord } from '../../shared/types/records';
 import { money, toNumber } from '../../shared/utils/money';
+import { recordMonthlyPayment, voidMonthlyPayment, type PaymentDraft } from './paymentTransactions';
 import { ExpenseDesk } from './ExpenseDesk';
 import { useLanguage } from '../../shared/i18n/LanguageProvider';
 import { defaultBusinessSettings, requireBusinessIdentity, type BusinessSettings } from '../customers/businessConfig';
@@ -48,21 +49,6 @@ import { useBusinessSettings } from '../settings/BusinessSettingsProvider';
 type MoneyView = 'dues' | 'collections' | 'expenses';
 type DueStatusFilter = 'due' | 'partial' | 'pending' | 'paid' | 'all';
 type PaymentStatusFilter = 'all' | 'recorded';
-type PaymentDraft = {
-  amountPaid: number;
-  paymentMode: string;
-  reference: string;
-  balance: number;
-  businessType: string;
-  month: string;
-  note: string;
-  paidOn: string;
-  status: string;
-  tenantId: string;
-  tenantName: string;
-  tenantRoom: string;
-  totalRent: number;
-};
 
 const dueFilters: Array<{ label: string; value: DueStatusFilter }> = [
   { label: 'Due', value: 'due' },
@@ -424,6 +410,8 @@ export function MoneyScreen() {
   const [paymentFormTenantId, setPaymentFormTenantId] = useState('');
   const [paymentFormAmount, setPaymentFormAmount] = useState(0);
   const [savingPayment, setSavingPayment] = useState(false);
+  const paymentInFlight = useRef(false);
+  const paymentAttempt = useRef<{ signature: string; id: string } | null>(null);
   const [invoiceAction, setInvoiceAction] = useState<'export' | 'generate' | ''>('');
   const [deletingPaymentId, setDeletingPaymentId] = useState('');
   const [actionError, setActionError] = useState('');
@@ -472,6 +460,7 @@ export function MoneyScreen() {
   }
 
   function openPaymentForm(tenantId = '', amount = 0) {
+    paymentAttempt.current = null;
     setActionError('');
     setPaymentFormAmount(amount);
     setPaymentFormTenantId(tenantId);
@@ -479,34 +468,24 @@ export function MoneyScreen() {
   }
 
   async function createPayment(payload: PaymentDraft) {
+    if (paymentInFlight.current) return;
+    paymentInFlight.current = true;
     setSavingPayment(true);
     setActionError('');
 
     try {
       const actorUid = auth.currentUser?.uid;
       if (!actorUid) throw new Error(t('Please sign in again.'));
-      const batch = writeBatch(db);
-      const paymentRef = doc(collection(db, 'payments'));
-      batch.set(paymentRef, {
-        ...payload,
-        createdBy: actorUid,
-        collectedBy: actorUid,
-        createdAt: serverTimestamp(),
-      });
-      batch.set(doc(collection(db, 'auditEvents')), {
-        action: 'payment.created',
-        actorUid,
-        createdAt: serverTimestamp(),
-        entityId: paymentRef.id,
-        entityType: 'payment',
-      });
-      await batch.commit();
+      const signature = JSON.stringify([payload.tenantId, payload.month, payload.amountPaid, payload.paymentMode, payload.reference, payload.note]);
+      if (paymentAttempt.current?.signature !== signature) paymentAttempt.current = { signature, id: doc(collection(db, 'payments')).id };
+      await recordMonthlyPayment(db, payload, actorUid, paymentAttempt.current.id);
       setShowPaymentForm(false);
       setView('collections');
       setPaymentFilter('all');
     } catch (createError) {
       setActionError(createError instanceof Error ? createError.message : t('Could not record payment.'));
     } finally {
+      paymentInFlight.current = false;
       setSavingPayment(false);
     }
   }
@@ -577,10 +556,7 @@ export function MoneyScreen() {
     try {
       const actorUid = auth.currentUser?.uid;
       if (!actorUid) throw new Error(t('Please sign in again.'));
-      const batch = writeBatch(db);
-      batch.update(doc(db, 'payments', paymentId), { status: 'Voided', updatedAt: serverTimestamp(), voidedAt: serverTimestamp(), voidedBy: actorUid });
-      batch.set(doc(collection(db, 'auditEvents')), { action: 'payment.voided', actorUid, createdAt: serverTimestamp(), entityId: paymentId, entityType: 'payment' });
-      await batch.commit();
+      await voidMonthlyPayment(db, paymentId, actorUid);
     } catch (deleteError) {
       setActionError(deleteError instanceof Error ? deleteError.message : t('Could not void payment.'));
     } finally {
@@ -648,6 +624,7 @@ export function MoneyScreen() {
           settlements={settlements.data}
           readings={meterReadings.data}
           saving={savingPayment}
+          saveError={actionError}
           styles={styles}
           tenants={tenants.data}
         />
@@ -836,6 +813,7 @@ function PaymentFormSheet({
   settlements,
   readings,
   saving,
+  saveError,
   styles,
   tenants,
 }: {
@@ -849,6 +827,7 @@ function PaymentFormSheet({
   settlements: SettlementRecord[];
   readings: MeterReadingRecord[];
   saving: boolean;
+  saveError: string;
   styles: ReturnType<typeof createStyles>;
   tenants: TenantRecord[];
 }) {
@@ -959,7 +938,7 @@ function PaymentFormSheet({
               </Pressable>
             </View>
 
-            {formError ? <Text style={styles.errorText}>{formError}</Text> : null}
+            {formError || saveError ? <Text accessibilityRole="alert" style={styles.errorText}>{formError || saveError}</Text> : null}
 
             <Text style={styles.formLabel}>{t('Customer')}</Text>
             {tenantOptions.length ? (

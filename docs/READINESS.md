@@ -11,3 +11,7 @@ Software branding is Parth Spaces. Customer business identity is independent; ex
 A new regression test demonstrated that an unverified customer with an already-active profile could activate an invited tenant record. The shared customerActivatingTenant rule now requires verified email. The regression failed before the fix and passed afterwards. All 15 Firestore emulator tests pass, including claimed-role/self-approval rejection; all 30 configured unit tests and the TypeScript check pass.
 
 These checks used a demo Firestore emulator, not customer records. Source synchronization alone does not deploy rules. Following the reported settings failure, the tested rules were deployed to kothari-pg and live/source equality was verified; see SETTINGS-NAVIGATION-REPAIR.md. Android installation, native CSV/PDF sharing, full recovery including actual login credentials, and customer acceptance remain release gates.
+
+## Staged customer-to-receipt pilot
+
+See [CUSTOMER-TO-RECEIPT.md](CUSTOMER-TO-RECEIPT.md) for payment transactions, retry protection, staged rules, browser acceptance and coordinated-release gates. New source has passed isolated checks; production remains on the previous version until compatible Android/web/rules and real-business recovery are accepted.

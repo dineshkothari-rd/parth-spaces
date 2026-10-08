@@ -42,7 +42,9 @@
     "test:rules": "npx firebase-tools@14 emulators:exec --only firestore \"node --test firestore.rules.test.mjs\"",
     "web": "expo start --web",
     "build:web": "expo export --platform web --clear",
-    "test:web": "node --test src/shared/utils/web.test.mjs"
+    "test:web": "node --test src/shared/utils/web.test.mjs",
+    "test:payments": "npx firebase-tools@14 emulators:exec --project demo-parth-spaces --only firestore \"tsx scripts/check-payment-lifecycle.ts\"",
+    "test:lifecycle": "npx firebase-tools@14 emulators:exec --project demo-parth-spaces --only auth,firestore \"node scripts/check-customer-to-receipt.mjs\""
   },
   "engines": {
     "node": ">=22.13.0"
