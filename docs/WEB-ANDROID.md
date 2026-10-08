@@ -1,5 +1,12 @@
 # Parth Spaces: web and Android foundation — 8 October 2026
 
+## Current Vercel testing preview — 8 October 2026
+
+Canonical web preview: https://parth-spaces.vercel.app. Vercel exports the same Expo application to `dist` with SPA fallback; existing Firebase production config is encrypted in project environment settings, emulator flags absent. Android distribution remains separate. Real-account/native billing lifecycle still needs acceptance.
+
+Free Hobby hosting is for personal, non-commercial testing; use an eligible plan before business launch. No paid resources were purchased. See the parent studio docs/DEPLOYMENT.md for the full portfolio status.
+
+
 ## Decision
 
 Keep one Expo/React Native product repository with shared screens, business calculations, Firebase records, roles and customer-business settings. React Native Web and React DOM were already installed; no new dependency or paid subscription was added. The web version is the authenticated business application, separate from the Parth Software Labs marketing/management parent platform.

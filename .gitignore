@@ -46,3 +46,5 @@ firestore-debug.log
 # local build artifacts
 *.apk
 
+.vercel
+.env*
