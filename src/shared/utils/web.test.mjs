@@ -95,3 +95,33 @@ test('PDF prints the supplied document separately and reports blocked popups', a
   blocked = true;
   await assert.rejects(downloadPdf({ fileName: 'receipt.pdf', html: '', title: 'Receipt' }), /Allow pop-ups/);
 });
+
+test('emulator mode rejects production projects and isolates demo auth, database and provisioning', () => {
+  function client(projectId, enabled) {
+    const connections = [];
+    const modules = {
+      'firebase/app': { getApps: () => [], initializeApp: (_config, name = 'default') => ({ name }) },
+      'firebase/auth': {
+        initializeAuth: (app) => ({ name: app.name }),
+        connectAuthEmulator: (auth, url) => connections.push([auth.name, url]),
+      },
+      'firebase/firestore': {
+        getFirestore: () => ({}),
+        connectFirestoreEmulator: (_db, host, port) => connections.push([host, port]),
+      },
+      '../../config/firebaseConfig': { __esModule: true, default: { projectId } },
+    };
+    const exports = load('../../lib/firebase/client.web.ts', {
+      process: { env: { EXPO_PUBLIC_FIREBASE_USE_EMULATORS: enabled ? 'true' : 'false' } },
+      require: (name) => modules[name],
+    });
+    return { exports, connections };
+  }
+  assert.throws(() => client('production-business', true), /demo-\*/);
+  assert.equal(client('production-business', false).connections.length, 0);
+  const demo = client('demo-parth-spaces', true);
+  assert.equal(demo.connections.length, 2);
+  demo.exports.getProvisioningAuth();
+  assert.equal(demo.connections.length, 3);
+  assert.ok(demo.connections.every(([host]) => host === 'default' || host === 'account-provisioning' || host === '127.0.0.1'));
+});

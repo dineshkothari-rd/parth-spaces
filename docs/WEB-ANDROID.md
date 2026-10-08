@@ -48,3 +48,7 @@ Positive sign-in, reload persistence, owner/staff/customer business journeys, li
 - Expo web workflow: https://docs.expo.dev/workflow/web/
 - Expo Print platform behavior: https://docs.expo.dev/versions/v57.0.0/sdk/print/
 - Firebase browser auth persistence: https://firebase.google.com/docs/auth/web/auth-state-persistence
+
+## Later settings/navigation repair
+
+The earlier foundation snapshot above preceded live rule deployment. See [SETTINGS-NAVIGATION-REPAIR.md](SETTINGS-NAVIGATION-REPAIR.md) for the confirmed settings denial, live rules synchronization, four current web tests and successful authenticated browser recovery checks. Full business lifecycle/device acceptance remains pending.

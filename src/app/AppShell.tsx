@@ -27,7 +27,7 @@ export function AppShell() {
 
 function AppShellRoot() {
   const session = useAppSession();
-  const [splashVisible, setSplashVisible] = useState(true);
+  const [splashVisible, setSplashVisible] = useState(Platform.OS !== 'web');
   const finishSplash = useCallback(() => setSplashVisible(false), []);
 
   return (
