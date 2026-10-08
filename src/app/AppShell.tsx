@@ -3,7 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationBar } from 'expo-navigation-bar';
 import { usePreventScreenCapture } from 'expo-screen-capture';
 import * as SystemUI from 'expo-system-ui';
-import { Animated, AppState, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, AppState, Easing, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { firebaseConfigStatus } from '../config/firebaseConfig';
 import { SignInScreen } from '../features/auth/SignInScreen';
@@ -150,7 +150,7 @@ function AppShellContent({ session }: { session: ReturnType<typeof useAppSession
   return (
     <AppErrorBoundary>
       <View style={styles.safeArea}>
-        {session.profile ? <AuthenticatedPrivacyShield /> : null}
+        {session.profile && Platform.OS !== 'web' ? <AuthenticatedPrivacyShield /> : null}
         <NavigationBar style={isDark ? 'dark' : 'light'} />
         <StatusBar style={isDark ? 'light' : 'dark'} />
         {!firebaseConfigStatus.ready ? (
