@@ -1,3 +1,4 @@
+import { downloadPdf } from '../../shared/utils/exportFile';
 import { useState } from 'react';
 import { Image, Text, View } from 'react-native';
 import { collection, doc, runTransaction, serverTimestamp, writeBatch } from 'firebase/firestore';
@@ -13,7 +14,6 @@ import type { AgreementRecord, MembershipPlan, MembershipRecord, TenantRecord } 
 import { money } from '../../shared/utils/money';
 import { useBusinessSettings } from '../settings/BusinessSettingsProvider';
 import { getDayKey, getMonthKey, shiftMonth } from '../operations/operationsMath';
-import { downloadPdf } from '../money/MoneyScreen';
 import { parseAmount } from '../money/financeMath';
 import { FilterPill } from './FilterPill';
 import { syncAllocationGuard } from './allocationTransactions';

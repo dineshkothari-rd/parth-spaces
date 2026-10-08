@@ -97,8 +97,9 @@ export function LifecycleMeterSheet({
         throw new Error(t('Meter photo is too large. Move closer and retake it.'));
       }
 
-      const { recognizeText } = await import('@infinitered/react-native-mlkit-text-recognition');
-      const recognized = await recognizeText(optimized.uri);
+      const recognized = Platform.OS === 'web'
+        ? { text: '' }
+        : await (await import('@infinitered/react-native-mlkit-text-recognition')).recognizeText(optimized.uri);
       const detectedCandidates = getMeterReadingCandidates(recognized.text, minimumReading);
       const suggested = detectedCandidates[0];
 
@@ -109,7 +110,9 @@ export function LifecycleMeterSheet({
       setReadingCandidates(detectedCandidates.slice(0, 6));
       setReading(suggested === undefined ? '' : String(suggested));
 
-      if (suggested === undefined) setError(t('No safe meter reading was detected. Enter it from the photo.'));
+      if (suggested === undefined) setError(t(Platform.OS === 'web'
+        ? 'Enter the meter reading from the photo. Automatic scanning is available in the Android app.'
+        : 'No safe meter reading was detected. Enter it from the photo.'));
     } catch (scanError) {
       setError(scanError instanceof Error ? scanError.message : t('Could not read meter photo.'));
     } finally {
@@ -208,7 +211,7 @@ export function LifecycleMeterSheet({
               </View>
             </View>
 
-            <Text style={styles.help}>{t('OCR is only a suggestion. Match the number with the photo before saving.')}</Text>
+            <Text style={styles.help}>{t(Platform.OS === 'web' ? 'Match the number with the photo before saving.' : 'OCR is only a suggestion. Match the number with the photo before saving.')}</Text>
 
             <View style={styles.actions}>
               <Pressable disabled={saving || scanning} onPress={onClose} style={styles.secondaryAction}>

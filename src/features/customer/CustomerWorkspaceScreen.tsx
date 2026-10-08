@@ -1,3 +1,4 @@
+import { downloadPdf } from '../../shared/utils/exportFile';
 import { Image, Linking } from 'react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -15,7 +16,7 @@ import { money } from '../../shared/utils/money';
 import { getBusinessType } from '../customers/businessTypes';
 import { getCustomerAllocationLabel, getCustomerName, getCustomerStatusGroup, getCustomerStatusLabel } from '../customers/customerUtils';
 import { calculateOutstandingBalance, getMeterReadingCharges, getMonthDisplay, getMonthKey, getPaymentAmount, isVoided } from '../operations/operationsMath';
-import { buildReceiptHtml, downloadPdf } from '../money/MoneyScreen';
+import { buildReceiptHtml } from '../money/MoneyScreen';
 import { mergeCustomerNotices } from './customerNotices';
 
 type CustomerData = {

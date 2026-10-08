@@ -191,6 +191,8 @@ export const translations: Record<AppLanguage, Record<string, string>> = {
     'Your account is not linked to a customer record yet.': 'Your login is ready, but it hasn’t been linked to your customer profile yet.',
   },
   hi: {
+    'Enter the meter reading from the photo. Automatic scanning is available in the Android app.': 'फोटो देखकर मीटर रीडिंग दर्ज करें। अपने-आप स्कैन करने की सुविधा Android ऐप में उपलब्ध है।',
+    'Match the number with the photo before saving.': 'सेव करने से पहले नंबर को फोटो से मिला लें।',
     "Money management": "धन प्रबंधन",
     "Memberships & agreements": "सदस्यता और अनुबंध",
     "Manual UPI collection": "मैन्युअल UPI भुगतान",

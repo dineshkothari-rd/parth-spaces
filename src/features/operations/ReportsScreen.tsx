@@ -9,7 +9,7 @@ import { useRealtimeClock } from '../../shared/hooks/useRealtimeClock';
 import type { DepositAccount, DepositEvent, ExpenseRecord, InvoiceRecord, MembershipRecord, MeterReadingRecord, PaymentRecord, SettlementRecord, TenantRecord, WorkItem } from '../../shared/types/records';
 import { FilterPill } from '../customers/FilterPill';
 import { useBusinessSettings } from '../settings/BusinessSettingsProvider';
-import { downloadPdf, shareCsv } from '../money/MoneyScreen';
+import { downloadPdf, shareCsv } from '../../shared/utils/exportFile';
 import { getDayKey, getMonthKey } from './operationsMath';
 import { buildReportTable, reportCsv, reportHtml, reportKinds, type ReportData, type ReportKind } from './reportMath';
 

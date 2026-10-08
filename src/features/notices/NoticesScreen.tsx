@@ -1,7 +1,7 @@
+import { Alert } from '../../shared/utils/alert';
 import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,

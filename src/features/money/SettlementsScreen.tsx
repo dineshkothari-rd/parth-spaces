@@ -1,7 +1,8 @@
+import { Alert } from '../../shared/utils/alert';
 import { FilterPill } from '../customers/FilterPill';
 import { parseAmount, paymentModes, validatePaymentDetails } from './financeMath';
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { collection, doc, serverTimestamp, writeBatch, runTransaction } from 'firebase/firestore';
 
 import { radius, spacing, typography, useAppTheme, type AppColors } from '../../design/tokens';

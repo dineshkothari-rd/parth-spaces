@@ -40,7 +40,9 @@
     "ios": "expo run:ios",
     "test": "tsx --test src/features/customers/businessIdentity.test.ts src/features/customer/customerNotices.test.ts src/features/customers/customerLifecycle.test.ts src/features/customers/customerUtils.test.ts src/features/customers/roomUtils.test.ts src/features/operations/operationsMath.test.ts src/features/money/financeMath.test.ts src/shared/types/permissions.test.ts",
     "test:rules": "npx firebase-tools@14 emulators:exec --only firestore \"node --test firestore.rules.test.mjs\"",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "build:web": "expo export --platform web",
+    "test:web": "node --test src/shared/utils/web.test.mjs"
   },
   "engines": {
     "node": ">=22.13.0"
