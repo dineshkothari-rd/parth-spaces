@@ -40,7 +40,7 @@ function createStyles(colors: AppColors) {
   input: {
     backgroundColor: colors.surfaceRaised,
     borderColor: colors.border,
-    borderRadius: radius.md,
+    borderRadius: radius.sm,
     borderWidth: 1,
     color: colors.text,
     fontSize: 16,

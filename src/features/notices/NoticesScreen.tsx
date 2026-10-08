@@ -619,7 +619,7 @@ function createStyles(colors: AppColors) {
       textTransform: 'uppercase',
     },
     audienceLabel: {
-      color: colors.brand,
+      color: colors.link,
       fontSize: 11,
       fontWeight: typography.weight.black,
       marginTop: spacing.xs,

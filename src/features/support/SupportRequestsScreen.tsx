@@ -115,7 +115,7 @@ function createStyles(colors: AppColors) {
     copy: { flex: 1 },
     name: { color: colors.text, fontSize: 17, fontWeight: typography.weight.black },
     type: { color: colors.muted, fontSize: 12, marginTop: spacing.xs },
-    status: { color: colors.brand, fontSize: 12, fontWeight: typography.weight.black },
+    status: { color: colors.link, fontSize: 12, fontWeight: typography.weight.black },
     message: { color: colors.text, fontSize: 14, lineHeight: 21, marginTop: spacing.md },
     responseInput: { minHeight: 76, paddingTop: spacing.md },
     response: { backgroundColor: colors.successSoft, borderRadius: radius.md, color: colors.success, fontSize: 13, lineHeight: 19, marginTop: spacing.md, padding: spacing.md },

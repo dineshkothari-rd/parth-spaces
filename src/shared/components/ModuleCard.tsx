@@ -56,7 +56,7 @@ function createStyles(colors: AppColors) {
     marginTop: spacing.sm,
   },
   collection: {
-    color: colors.copper,
+    color: colors.link,
     fontSize: 12,
     fontWeight: typography.weight.bold,
     marginTop: spacing.md,

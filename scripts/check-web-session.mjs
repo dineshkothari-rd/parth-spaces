@@ -3,6 +3,8 @@ import { doc, setDoc } from 'firebase/firestore';
 import { readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 if (!process.env.PARTH_PLAYWRIGHT_MODULE || !process.env.PARTH_WEB_TEST_DIR) throw new Error('Set PARTH_PLAYWRIGHT_MODULE and PARTH_WEB_TEST_DIR for the isolated browser test.');
 const { chromium, expect } = await import(pathToFileURL(process.env.PARTH_PLAYWRIGHT_MODULE).href);
 import assert from 'node:assert/strict';
@@ -24,9 +26,25 @@ const server=spawn('python3',['-m','http.server','5186','--bind','127.0.0.1','--
 const browser=await chromium.launch({executablePath:process.env.PARTH_BROWSER_EXECUTABLE,headless:true});
 const errors=[];
 try {
- const context=await browser.newContext();const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+ const context=await browser.newContext({viewport:{width:1440,height:960}});const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
  async function login(role){await page.goto('http://127.0.0.1:5186');await page.getByPlaceholder('admin@example.com').fill(emails[role]);await page.getByPlaceholder('Password',{exact:true}).fill(password);await page.getByRole('button',{name:'Continue',exact:true}).click();await expect(page.getByText(/Synthetic Spaces ·/).first()).toBeVisible({timeout:15000});}
  await login('admin');console.log('Admin settings loaded');
+ await expect(page.getByTestId('desktop-sidebar')).toBeVisible();
+ assert.equal(await page.getByTestId('mobile-navigation').count(),0);
+ assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ await page.screenshot({path:join(tmpdir(),'parth-spaces-dashboard-desktop.png'),fullPage:true});
+ for (const width of [960,390]) {
+   await page.setViewportSize({width,height:844});
+   await expect(page.getByTestId('mobile-navigation')).toBeVisible();
+   assert.equal(await page.getByTestId('desktop-sidebar').count(),0);
+   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ }
+ await page.screenshot({path:join(tmpdir(),'parth-spaces-dashboard-mobile.png'),fullPage:true});
+ await page.emulateMedia({colorScheme:'dark'});
+ await page.screenshot({path:join(tmpdir(),'parth-spaces-dashboard-dark.png'),fullPage:true});
+ await page.emulateMedia({colorScheme:'light'});
+ await page.setViewportSize({width:1440,height:960});
+ console.log('Desktop sidebar, tablet/mobile navigation and light/dark responsive layout checked');
  await page.reload();await expect(page.getByText(/Synthetic Spaces ·/).first()).toBeVisible({timeout:15000});console.log('Admin reload persisted');
  await page.getByRole('button',{name:'C Customers',exact:true}).click();await expect(page.getByText('Demo Customer',{exact:false}).first()).toBeVisible();console.log('Customer module click works');
  // Force only this synthetic settings stream to deny access, then restore it.

@@ -79,8 +79,8 @@ export function BusinessSettingsProvider({ children, onSignOut, profile }: Props
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 16 }}>
       {loading ? <ActivityIndicator color={colors.brand} /> : <>
         <Text style={{ color: colors.danger }}>{t(error)}</Text>
-        <Pressable accessibilityRole="button" onPress={() => setRetry((value) => value + 1)}><Text style={{ color: colors.brand }}>{t('Try again')}</Text></Pressable>
-        <Pressable accessibilityRole="button" onPress={onSignOut}><Text style={{ color: colors.brand }}>{t('Logout')}</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => setRetry((value) => value + 1)}><Text style={{ color: colors.link }}>{t('Try again')}</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={onSignOut}><Text style={{ color: colors.link }}>{t('Logout')}</Text></Pressable>
       </>}
     </View>
   );

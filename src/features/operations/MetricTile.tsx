@@ -12,8 +12,8 @@ export function MetricTile({ label, tone = 'brand', value }: MetricTileProps) {
   const { colors } = useAppTheme();
   const styles = createStyles(colors);
   const toneStyles = {
-    blue: { backgroundColor: colors.accentSoft, color: colors.accent },
-    brand: { backgroundColor: colors.skySoft, color: colors.brand },
+    blue: { backgroundColor: colors.accentSoft, color: colors.link },
+    brand: { backgroundColor: colors.skySoft, color: colors.link },
     green: { backgroundColor: colors.successSoft, color: colors.success },
     orange: { backgroundColor: colors.warningSoft, color: colors.warning },
     red: { backgroundColor: colors.dangerSoft, color: colors.danger },

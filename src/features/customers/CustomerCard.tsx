@@ -233,7 +233,7 @@ function createStyles(colors: AppColors) {
     width: 42,
   },
   avatarText: {
-    color: colors.copper,
+    color: colors.link,
     fontSize: 18,
     fontWeight: typography.weight.black,
   },
@@ -307,7 +307,7 @@ function createStyles(colors: AppColors) {
     marginTop: 5,
   },
   linkValue: {
-    color: colors.brand,
+    color: colors.link,
   },
   services: {
     flexDirection: 'row',
@@ -338,7 +338,7 @@ function createStyles(colors: AppColors) {
   service: {
     backgroundColor: colors.accentSoft,
     borderRadius: radius.sm,
-    color: colors.accent,
+    color: colors.link,
     fontSize: 12,
     fontWeight: typography.weight.bold,
     overflow: 'hidden',
@@ -389,7 +389,7 @@ function createStyles(colors: AppColors) {
     marginTop: 3,
   },
   proofView: {
-    color: colors.brand,
+    color: colors.link,
     fontSize: 12,
     fontWeight: typography.weight.black,
     marginTop: spacing.sm,

@@ -116,7 +116,7 @@ export function CustomerWorkspaceScreen({ onSignOut, profile }: { onSignOut: () 
   return (
     <View style={styles.screen}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top + spacing.sm, spacing.lg) }]}>
-        <View style={styles.brandMark}><Text style={styles.brandMarkText}>K</Text></View>
+        <View style={styles.brandMark}><Text style={styles.brandMarkText}>P</Text></View>
         <View style={styles.headerCopy}>
           <Text style={styles.eyebrow}>{settings.name}</Text>
           <Text numberOfLines={1} style={styles.headerTitle}>{profile.name}</Text>
@@ -354,7 +354,7 @@ function createStyles(colors: AppColors) {
     headerTitle: { color: colors.panelText, fontSize: 18, fontWeight: typography.weight.black, marginTop: 2 },
     signOutButton: { backgroundColor: colors.overlaySubtle, borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
     signOutText: { color: colors.panelText, fontSize: 12, fontWeight: typography.weight.black },
-    content: { alignSelf: 'center', maxWidth: 720, padding: spacing.lg, width: '100%' },
+    content: { alignSelf: 'center', maxWidth: 1000, padding: spacing.lg, width: '100%' },
     status: { alignItems: 'center', flexDirection: 'row', gap: spacing.sm, justifyContent: 'center', padding: spacing.xl },
     statusText: { color: colors.muted, fontSize: 13, fontWeight: typography.weight.bold },
     error: { backgroundColor: colors.dangerSoft, borderRadius: radius.md, color: colors.danger, marginBottom: spacing.md, padding: spacing.md },
@@ -382,7 +382,7 @@ function createStyles(colors: AppColors) {
     rowMeta: { color: colors.muted, fontSize: 12, marginTop: 3 },
     rowValue: { color: colors.success, fontSize: 15, fontWeight: typography.weight.black },
     paymentAction: { alignItems: 'flex-end', gap: spacing.xs },
-    receiptLink: { color: colors.brand, fontSize: 12, fontWeight: typography.weight.black },
+    receiptLink: { color: colors.link, fontSize: 12, fontWeight: typography.weight.black },
     notice: { paddingVertical: spacing.md },
     noticeText: { color: colors.muted, fontSize: 13, lineHeight: 19, marginTop: spacing.xs },
     emptyState: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.lg, marginTop: spacing.lg, padding: spacing.xl },
@@ -399,7 +399,7 @@ function createStyles(colors: AppColors) {
     submitRequestText: { color: colors.onBrand, fontSize: 13, fontWeight: typography.weight.black },
     disabled: { opacity: 0.55 },
     requestRow: { alignItems: 'center', borderTopColor: colors.borderSoft, borderTopWidth: 1, flexDirection: 'row', gap: spacing.md, marginTop: spacing.md, paddingTop: spacing.md },
-    requestStatus: { color: colors.brand, fontSize: 11, fontWeight: typography.weight.black },
+    requestStatus: { color: colors.link, fontSize: 11, fontWeight: typography.weight.black },
     requestResponse: { color: colors.success, fontSize: 12, lineHeight: 18, marginTop: spacing.xs },
   });
 }

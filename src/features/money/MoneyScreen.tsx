@@ -1456,7 +1456,7 @@ function createStyles(colors: AppColors) {
       paddingVertical: spacing.sm,
     },
     latestActionText: {
-      color: colors.brand,
+      color: colors.link,
       fontSize: 12,
       fontWeight: typography.weight.black,
     },

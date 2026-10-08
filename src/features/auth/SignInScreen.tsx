@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { radius, shadow, spacing, typography, useAppTheme, type AppColors } from '../../design/tokens';
@@ -22,7 +22,9 @@ export function SignInScreen({ error, loading, onForgotPassword, onSignIn }: Sig
   const [recoveryMessage, setRecoveryMessage] = useState('');
   const { colors } = useAppTheme();
   const { t } = useLanguage();
-  const styles = createStyles(colors);
+  const { width } = useWindowDimensions();
+  const wide = Platform.OS === 'web' && width >= 900;
+  const styles = createStyles(colors, wide);
   const insets = useSafeAreaInsets();
 
   function submit() {
@@ -60,11 +62,12 @@ export function SignInScreen({ error, loading, onForgotPassword, onSignIn }: Sig
         <View style={styles.container}>
           <View style={styles.hero}>
             <View style={styles.mark}>
-              <Text style={styles.markText}>PS</Text>
+              <Text style={styles.markText}>P</Text>
             </View>
             <Text style={styles.eyebrow}>Parth Spaces</Text>
             <Text style={styles.title}>{t('Welcome back')}</Text>
             <Text style={styles.subtitle}>{t('Sign in to manage your stay, membership, rooms, and payments.')}</Text>
+            <Text style={styles.studio}>BY PARTH SOFTWARE LABS</Text>
           </View>
 
           <View style={styles.form}>
@@ -130,7 +133,7 @@ export function SignInScreen({ error, loading, onForgotPassword, onSignIn }: Sig
   );
 }
 
-function createStyles(colors: AppColors) {
+function createStyles(colors: AppColors, wide: boolean) {
   return StyleSheet.create({
   screen: {
     backgroundColor: colors.canvas,
@@ -143,13 +146,17 @@ function createStyles(colors: AppColors) {
   },
   container: {
     alignSelf: 'center',
-    maxWidth: 520,
+    maxWidth: wide ? 1060 : 480,
+    flexDirection: wide ? 'row' : 'column',
+    alignItems: wide ? 'center' : 'stretch',
+    gap: wide ? 72 : spacing.lg,
     width: '100%',
   },
   hero: {
-    backgroundColor: colors.ink,
+    backgroundColor: wide ? colors.canvas : colors.surface,
     borderRadius: radius.lg,
     padding: spacing.xl,
+    flex: wide ? 1 : undefined,
   },
   mark: {
     alignItems: 'center',
@@ -165,7 +172,7 @@ function createStyles(colors: AppColors) {
     fontWeight: typography.weight.black,
   },
   eyebrow: {
-    color: colors.panelAccent,
+    color: colors.link,
     fontSize: 12,
     fontWeight: typography.weight.black,
     letterSpacing: 1.2,
@@ -173,16 +180,16 @@ function createStyles(colors: AppColors) {
     textTransform: 'uppercase',
   },
   title: {
-    color: colors.panelText,
-    fontSize: 32,
+    color: colors.text,
+    fontSize: wide ? 52 : 32,
     fontWeight: typography.weight.black,
-    lineHeight: 36,
+    lineHeight: wide ? 58 : 38,
     marginTop: spacing.sm,
   },
   subtitle: {
-    color: colors.panelMuted,
-    fontSize: 15,
-    lineHeight: 22,
+    color: colors.muted,
+    fontSize: wide ? 18 : 15,
+    lineHeight: wide ? 28 : 23,
     marginTop: spacing.sm,
   },
   form: {
@@ -191,8 +198,8 @@ function createStyles(colors: AppColors) {
     borderRadius: radius.lg,
     borderWidth: 1,
     gap: spacing.lg,
-    marginTop: spacing.lg,
-    padding: spacing.lg,
+    width: wide ? 420 : undefined,
+    padding: wide ? 32 : spacing.xl,
     ...shadow.card,
   },
   formTitle: {
@@ -209,13 +216,17 @@ function createStyles(colors: AppColors) {
   passwordToggle: {
     alignSelf: 'flex-end',
     marginTop: spacing.sm,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   forgotPassword: {
     alignSelf: 'flex-start',
     marginTop: spacing.sm,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   passwordToggleText: {
-    color: colors.brand,
+    color: colors.link,
     fontSize: 13,
     fontWeight: typography.weight.black,
   },
@@ -228,6 +239,7 @@ function createStyles(colors: AppColors) {
     lineHeight: 19,
     padding: spacing.md,
   },
+  studio: { color: colors.muted, fontSize: 11, letterSpacing: 1.5, marginTop: 32 },
   notice: {
     backgroundColor: colors.successSoft,
     borderRadius: radius.md,

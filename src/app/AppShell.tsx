@@ -116,7 +116,7 @@ function AnimatedSplash({ onFinish, ready }: { onFinish: () => void; ready: bool
         <View style={[splashStyles.spark, splashStyles.sparkBottom]} />
         <View style={splashStyles.logo}>
           <View style={splashStyles.logoInset}>
-            <Text style={splashStyles.logoText}>K</Text>
+            <Text style={splashStyles.logoText}>P</Text>
           </View>
           <View style={splashStyles.logoAccent} />
         </View>
@@ -361,7 +361,7 @@ function createStyles(colors: AppColors) {
     paddingVertical: spacing.sm,
   },
   secondaryButtonText: {
-    color: colors.brand,
+    color: colors.link,
     fontSize: 13,
     fontWeight: typography.weight.black,
   },
@@ -400,7 +400,7 @@ const splashStyles = StyleSheet.create({
     width: 236,
   },
   haloInner: {
-    backgroundColor: 'rgba(45,212,191,0.07)',
+    backgroundColor: 'rgba(40,77,232,0.07)',
     borderColor: 'rgba(94,234,212,0.36)',
     borderRadius: 92,
     borderWidth: 1,
@@ -409,7 +409,7 @@ const splashStyles = StyleSheet.create({
     width: 184,
   },
   spark: {
-    backgroundColor: '#F5A06D',
+    backgroundColor: '#AFC0FF',
     borderRadius: 5,
     height: 10,
     position: 'absolute',
@@ -425,7 +425,7 @@ const splashStyles = StyleSheet.create({
   },
   logo: {
     alignItems: 'center',
-    backgroundColor: '#147D64',
+    backgroundColor: '#284DE8',
     borderRadius: 32,
     height: 128,
     justifyContent: 'center',
@@ -437,7 +437,7 @@ const splashStyles = StyleSheet.create({
   },
   logoInset: {
     alignItems: 'center',
-    backgroundColor: '#2DD4BF',
+    backgroundColor: '#284DE8',
     borderRadius: 25,
     height: 96,
     justifyContent: 'center',
@@ -450,7 +450,7 @@ const splashStyles = StyleSheet.create({
     letterSpacing: -3,
   },
   logoAccent: {
-    backgroundColor: '#F5A06D',
+    backgroundColor: '#AFC0FF',
     borderColor: '#0F172A',
     borderRadius: 10,
     borderWidth: 4,
@@ -461,7 +461,7 @@ const splashStyles = StyleSheet.create({
     width: 20,
   },
   eyebrow: {
-    color: '#5EEAD4',
+    color: '#AFC0FF',
     fontSize: 12,
     fontWeight: typography.weight.black,
     letterSpacing: 4,
@@ -490,7 +490,7 @@ const splashStyles = StyleSheet.create({
     width: 120,
   },
   progress: {
-    backgroundColor: '#2DD4BF',
+    backgroundColor: '#284DE8',
     borderRadius: 3,
     height: 3,
     width: 120,

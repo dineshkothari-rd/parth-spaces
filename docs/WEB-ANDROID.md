@@ -52,3 +52,7 @@ Positive sign-in, reload persistence, owner/staff/customer business journeys, li
 ## Later settings/navigation repair
 
 The earlier foundation snapshot above preceded live rule deployment. See [SETTINGS-NAVIGATION-REPAIR.md](SETTINGS-NAVIGATION-REPAIR.md) for the confirmed settings denial, live rules synchronization, four current web tests and successful authenticated browser recovery checks. Full business lifecycle/device acceptance remains pending.
+
+## Shared Parth design system
+
+The 8 October design update aligns Spaces with the parent blue/neutral palette. Web sign-in becomes two columns at 900px; desktop admin/staff navigation becomes a sidebar at 1000px with up to 1200px content. Smaller browsers and native devices retain bottom navigation. The canonical palette and cross-repository maintenance are documented in Parth Software Labs `docs/DESIGN-SYSTEM.md`. Existing permissions, Firebase configuration and stored theme preferences stay compatible.

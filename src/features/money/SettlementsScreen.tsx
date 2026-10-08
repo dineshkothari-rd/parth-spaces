@@ -164,7 +164,7 @@ function createStyles(colors: AppColors) {
     actionText: { color: colors.onBrand, fontWeight: typography.weight.black },
     paymentBox: { marginTop: spacing.md },
     balanceAction: { alignItems: 'center', borderColor: colors.brand, borderRadius: radius.md, borderWidth: 1, marginTop: spacing.md, padding: spacing.md },
-    balanceActionText: { color: colors.brand, fontWeight: typography.weight.black },
+    balanceActionText: { color: colors.link, fontWeight: typography.weight.black },
     error: { backgroundColor: colors.dangerSoft, borderRadius: radius.md, color: colors.danger, marginBottom: spacing.md, padding: spacing.md },
     empty: { color: colors.muted, padding: spacing.xl, textAlign: 'center' },
   });

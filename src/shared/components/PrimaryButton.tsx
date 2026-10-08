@@ -31,7 +31,7 @@ function createStyles(colors: AppColors) {
   button: {
     alignItems: 'center',
     backgroundColor: colors.brand,
-    borderRadius: radius.md,
+    borderRadius: radius.sm,
     minHeight: 52,
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,

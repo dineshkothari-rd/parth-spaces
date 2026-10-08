@@ -74,7 +74,7 @@ function createStyles(colors: AppColors) {
     header: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
     day: { color: colors.text, fontSize: 17, fontWeight: typography.weight.black },
     date: { color: colors.muted, fontSize: 11, marginTop: 2 },
-    rooms: { color: colors.brand, fontSize: 12, fontWeight: typography.weight.black },
+    rooms: { color: colors.link, fontSize: 12, fontWeight: typography.weight.black },
     metrics: { flexDirection: 'row', gap: spacing.sm, marginVertical: spacing.md },
     metric: { backgroundColor: colors.surfaceRaised, borderRadius: radius.md, flex: 1, padding: spacing.sm },
     metricValue: { color: colors.text, fontSize: 16, fontWeight: typography.weight.black },
@@ -83,9 +83,9 @@ function createStyles(colors: AppColors) {
     bookingCopy: { flex: 1 },
     name: { color: colors.text, fontSize: 13, fontWeight: typography.weight.black },
     meta: { color: colors.muted, fontSize: 11, marginTop: 2 },
-    status: { color: colors.brand, fontSize: 11, fontWeight: typography.weight.bold },
+    status: { color: colors.link, fontSize: 11, fontWeight: typography.weight.bold },
     empty: { color: colors.muted, fontSize: 12, paddingVertical: spacing.md, textAlign: 'center' },
-    more: { color: colors.brand, fontSize: 11, marginTop: spacing.sm, textAlign: 'center' },
+    more: { color: colors.link, fontSize: 11, marginTop: spacing.sm, textAlign: 'center' },
     error: { backgroundColor: colors.dangerSoft, borderRadius: radius.md, color: colors.danger, marginBottom: spacing.md, padding: spacing.md },
   });
 }

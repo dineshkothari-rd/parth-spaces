@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { doc, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { radius, shadow, spacing, typography, useAppTheme, type AppColors } from '../../design/tokens';
@@ -38,7 +38,9 @@ export function WorkspaceScreen({ admin, onSignOut }: WorkspaceScreenProps) {
   const { settings, can } = useBusinessSettings();
   const { colors } = useAppTheme();
   const { t } = useLanguage();
-  const styles = useMemo(() => createStyles(colors), [colors]);
+  const { width } = useWindowDimensions();
+  const wide = Platform.OS === 'web' && width >= 1000;
+  const styles = useMemo(() => createStyles(colors, wide), [colors, wide]);
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
@@ -85,8 +87,39 @@ export function WorkspaceScreen({ admin, onSignOut }: WorkspaceScreenProps) {
     setActiveTab('more');
   }
 
+  const navigation = (
+        <View style={styles.nav}>
+          {primaryTabs.filter((tab) => tab.id !== 'tenants' || can('customers')).filter((tab) => tab.id !== 'payments' || can('money')).map((tab) => {
+            const active = tab.id === visibleTab;
+
+            return (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                key={tab.id}
+                onPress={() => {
+                  if (tab.id === 'tenants') setCustomerStart({ action: '', mode: 'All', status: '', customerId: '' });
+                  setActiveTab(tab.id);
+                }}
+                style={[styles.navItem, active && styles.navItemActive]}
+              >
+                <Text style={[styles.navMark, active && styles.navMarkActive]}>{tab.mark}</Text>
+                <Text style={[styles.navLabel, active && styles.navLabelActive]}>{t(tab.label)}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+  );
+
   return (
     <View style={styles.screen}>
+      {wide ? <View style={styles.sidebar} testID="desktop-sidebar">
+        <View style={styles.sidebarBrand}><View style={styles.brandMark}><Text style={styles.brandMarkText}>P</Text></View><Text style={styles.sidebarTitle}>Parth Spaces</Text></View>
+        <Text style={styles.sidebarCaption}>WORKSPACE</Text>
+        {navigation}
+        <Text style={styles.sidebarFooter}>Parth Software Labs</Text>
+      </View> : null}
+      <View style={styles.workspaceBody}>
       <View style={[styles.header, { paddingTop: Math.max(insets.top + spacing.sm, spacing.lg) }]}>
         <View style={styles.brandRow}>
           <View style={styles.brandMark}>
@@ -104,6 +137,7 @@ export function WorkspaceScreen({ admin, onSignOut }: WorkspaceScreenProps) {
 
       <FirestoreRefreshContext.Provider value={refreshKey}>
         <ScrollView
+          testID="workspace-scroll"
           alwaysBounceVertical
           contentContainerStyle={[styles.content, { paddingBottom: Math.max(insets.bottom, spacing.xl) }]}
           keyboardShouldPersistTaps="handled"
@@ -140,46 +174,34 @@ export function WorkspaceScreen({ admin, onSignOut }: WorkspaceScreenProps) {
         </ScrollView>
       </FirestoreRefreshContext.Provider>
 
-      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, Platform.OS === 'android' ? 48 : spacing.sm) }]}>
-        <View style={styles.nav}>
-          {primaryTabs.filter((tab) => tab.id !== 'tenants' || can('customers')).filter((tab) => tab.id !== 'payments' || can('money')).map((tab) => {
-            const active = tab.id === visibleTab;
-
-            return (
-              <Pressable
-                accessibilityRole="button"
-                key={tab.id}
-                onPress={() => {
-                  if (tab.id === 'tenants') setCustomerStart({ action: '', mode: 'All', status: '', customerId: '' });
-                  setActiveTab(tab.id);
-                }}
-                style={[styles.navItem, active && styles.navItemActive]}
-              >
-                <Text style={[styles.navMark, active && styles.navMarkActive]}>{tab.mark}</Text>
-                <Text style={[styles.navLabel, active && styles.navLabelActive]}>{t(tab.label)}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+      {!wide ? <View testID="mobile-navigation" style={[styles.footer, { paddingBottom: Math.max(insets.bottom, Platform.OS === 'android' ? 48 : spacing.sm) }]}>{navigation}</View> : null}
       </View>
     </View>
   );
 }
 
-function createStyles(colors: AppColors) {
+function createStyles(colors: AppColors, wide: boolean) {
   return StyleSheet.create({
   screen: {
     backgroundColor: colors.canvas,
     flex: 1,
+    flexDirection: wide ? 'row' : 'column',
   },
+  workspaceBody: { flex: 1, minWidth: 0 },
+  sidebar: { width: 232, backgroundColor: colors.surface, borderRightWidth: 1, borderRightColor: colors.border, padding: 20 },
+  sidebarBrand: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: 40 },
+  sidebarTitle: { color: colors.text, fontWeight: typography.weight.bold, fontSize: 19 },
+  sidebarCaption: { color: colors.muted, fontSize: 11, letterSpacing: 1.4, marginBottom: spacing.lg },
+  sidebarFooter: { color: colors.muted, fontSize: 12, marginTop: 'auto', paddingTop: spacing.xl },
   header: {
     alignItems: 'center',
-    backgroundColor: colors.ink,
+    backgroundColor: colors.surface,
+    borderBottomWidth: 1,
     borderBottomColor: colors.border,
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingBottom: spacing.lg,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: wide ? 32 : spacing.lg,
     paddingTop: spacing.lg,
   },
   brandRow: {
@@ -205,33 +227,35 @@ function createStyles(colors: AppColors) {
     flex: 1,
   },
   eyebrow: {
-    color: colors.panelSubtle,
+    color: colors.muted,
     fontSize: 12,
     fontWeight: typography.weight.bold,
     textTransform: 'uppercase',
   },
   title: {
-    color: colors.onBrand,
+    color: colors.text,
     fontSize: 19,
     fontWeight: typography.weight.black,
     marginTop: 2,
   },
   exitButton: {
-    backgroundColor: colors.overlaySubtle,
+    backgroundColor: colors.surfaceMuted,
+    minHeight: 44,
+    justifyContent: 'center',
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
   exitText: {
-    color: colors.onBrand,
+    color: colors.text,
     fontSize: 13,
     fontWeight: typography.weight.black,
   },
   content: {
     alignSelf: 'center',
     flexGrow: 1,
-    maxWidth: 960,
-    padding: spacing.lg,
+    maxWidth: 1200,
+    padding: wide ? 32 : spacing.lg,
     paddingBottom: spacing.xl,
     width: '100%',
   },
@@ -273,27 +297,29 @@ function createStyles(colors: AppColors) {
     paddingTop: spacing.sm,
   },
   nav: {
-    backgroundColor: colors.surfaceRaised,
+    backgroundColor: wide ? colors.surface : colors.surfaceRaised,
     borderColor: colors.borderSoft,
     borderRadius: radius.lg,
-    borderWidth: 1,
-    flexDirection: 'row',
+    borderWidth: wide ? 0 : 1,
+    flexDirection: wide ? 'column' : 'row',
     gap: spacing.sm,
     maxWidth: 680,
     padding: spacing.sm,
-    ...shadow.dock,
+    ...(wide ? {} : shadow.dock),
     width: '100%',
   },
   navItem: {
     alignItems: 'center',
-    borderRadius: radius.md,
-    flex: 1,
-    gap: 3,
+    flexDirection: wide ? 'row' : 'column',
+    paddingHorizontal: wide ? spacing.md : 0,
+    borderRadius: radius.sm,
+    flex: wide ? undefined : 1,
+    gap: wide ? spacing.md : 3,
     minHeight: 50,
-    justifyContent: 'center',
+    justifyContent: wide ? 'flex-start' : 'center',
   },
   navItemActive: {
-    backgroundColor: colors.ink,
+    backgroundColor: colors.brand,
   },
   navMark: {
     color: colors.subtle,
@@ -301,7 +327,7 @@ function createStyles(colors: AppColors) {
     fontWeight: typography.weight.black,
   },
   navMarkActive: {
-    color: colors.panelAccent,
+    color: colors.onBrand,
   },
   navLabel: {
     color: colors.muted,

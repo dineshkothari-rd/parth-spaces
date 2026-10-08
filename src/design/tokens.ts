@@ -1,72 +1,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, createElement, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 import { useColorScheme } from 'react-native';
+import { parthDark, parthLight } from './parthPalette';
 
-export const lightColors = {
-  canvas: '#F5F7F4',
-  surface: '#FFFFFF',
-  surfaceMuted: '#EEF3F0',
-  surfaceRaised: '#FAFCFA',
-  ink: '#142C26',
-  text: '#183029',
-  muted: '#64756F',
-  subtle: '#9AABA5',
-  border: '#D9E2DE',
-  borderSoft: '#E8EEEB',
-  brand: '#147D64',
-  onBrand: '#FFFFFF',
-  copper: '#D9773F',
-  copperSoft: '#FCE9DC',
-  success: '#147D64',
-  successSoft: '#DDF3EB',
-  warning: '#A9690E',
-  warningSoft: '#FFF0CF',
-  danger: '#B84040',
-  dangerSoft: '#FBE4E2',
-  accent: '#5369A8',
-  accentSoft: '#E8ECF8',
-  sky: '#397B8E',
-  skySoft: '#E2F0F2',
-  panelText: '#F8FCFA',
-  panelMuted: '#C5D8D2',
-  panelSubtle: '#91AEA5',
-  panelAccent: '#F5B989',
-  overlayFaint: 'rgba(255,255,255,0.08)',
-  overlaySubtle: 'rgba(255,255,255,0.10)',
-};
-
-export const darkColors: typeof lightColors = {
-  canvas: '#08110E',
-  surface: '#101C18',
-  surfaceMuted: '#17251F',
-  surfaceRaised: '#1B2B25',
-  ink: '#050B09',
-  text: '#F0F7F4',
-  muted: '#A5B8B1',
-  subtle: '#708A80',
-  border: '#2A3D36',
-  borderSoft: '#20322C',
-  brand: '#55D6B1',
-  onBrand: '#FFFFFF',
-  copper: '#F5A06D',
-  copperSoft: '#35251C',
-  success: '#55D6B1',
-  successSoft: '#103128',
-  warning: '#F1C45D',
-  warningSoft: '#332716',
-  danger: '#FF8D88',
-  dangerSoft: '#351D1D',
-  accent: '#B4C1F5',
-  accentSoft: '#222A45',
-  sky: '#7AC7D1',
-  skySoft: '#123039',
-  panelText: '#F8FCFA',
-  panelMuted: '#B9CEC7',
-  panelSubtle: '#7F9D93',
-  panelAccent: '#F5B989',
-  overlayFaint: 'rgba(255,255,255,0.08)',
-  overlaySubtle: 'rgba(255,255,255,0.10)',
-};
+function palette(theme: typeof parthLight | typeof parthDark) {
+  return {
+    canvas: theme.canvas, surface: theme.surface, surfaceMuted: theme.soft, surfaceRaised: theme.raised,
+    ink: theme.panel, text: theme.text, muted: theme.muted, subtle: theme.subtle,
+    border: theme.border, borderSoft: theme.border, brand: theme.brand, link: theme.link, onBrand: theme.onBrand,
+    copper: theme.brand, copperSoft: theme.brandSoft, accent: theme.brand, accentSoft: theme.brandSoft,
+    sky: theme.brand, skySoft: theme.brandSoft,
+    success: theme.success, successSoft: theme.successSoft, warning: theme.warning, warningSoft: theme.warningSoft,
+    danger: theme.danger, dangerSoft: theme.dangerSoft,
+    panelText: theme.panelText, panelMuted: theme.panelMuted, panelSubtle: theme.panelMuted, panelAccent: '#AFC0FF',
+    overlayFaint: 'rgba(255,255,255,0.08)', overlaySubtle: 'rgba(255,255,255,0.10)',
+  };
+}
+export const lightColors = palette(parthLight);
+export const darkColors: typeof lightColors = palette(parthDark);
 
 export type AppColorScheme = 'light' | 'dark';
 export type ThemePreference = 'system' | AppColorScheme;
@@ -160,8 +111,8 @@ export const spacing = {
 
 export const radius = {
   sm: 10,
-  md: 14,
-  lg: 22,
+  md: 16,
+  lg: 24,
 };
 
 export const shadow = {
@@ -185,6 +136,6 @@ export const typography = {
   weight: {
     medium: '500' as const,
     bold: '700' as const,
-    black: '900' as const,
+    black: '700' as const,
   },
 };

@@ -2075,7 +2075,7 @@ function createStyles(colors: AppColors) {
   calendarFieldRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginTop: 7 },
   calendarFieldValue: { color: colors.text, fontSize: 15, fontWeight: typography.weight.black },
   calendarPlaceholder: { color: colors.muted },
-  calendarIcon: { color: colors.brand, fontSize: 11, fontWeight: typography.weight.black },
+  calendarIcon: { color: colors.link, fontSize: 11, fontWeight: typography.weight.black },
   calendarBackdrop: { alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.62)', flex: 1, justifyContent: 'center', padding: spacing.lg },
   calendarCard: { backgroundColor: colors.surface, borderRadius: radius.lg, maxWidth: 420, padding: spacing.lg, width: '100%' },
   calendarHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
@@ -2211,7 +2211,7 @@ function createStyles(colors: AppColors) {
     fontWeight: typography.weight.black,
   },
   roomStatus: {
-    color: colors.brand,
+    color: colors.link,
     fontSize: 20,
     fontWeight: typography.weight.black,
     marginTop: spacing.lg,

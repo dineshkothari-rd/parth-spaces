@@ -119,7 +119,7 @@ function createStyles(colors: AppColors) {
   return StyleSheet.create({
     backdrop: { backgroundColor: 'rgba(0,0,0,0.58)', flex: 1, justifyContent: 'flex-end' },
     sheet: { backgroundColor: colors.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, maxHeight: '92%', padding: spacing.xl },
-    kicker: { color: colors.brand, fontSize: 12, fontWeight: typography.weight.black, textTransform: 'uppercase' },
+    kicker: { color: colors.link, fontSize: 12, fontWeight: typography.weight.black, textTransform: 'uppercase' },
     title: { color: colors.text, fontSize: 24, fontWeight: typography.weight.black, marginTop: spacing.xs },
     subtitle: { color: colors.muted, fontSize: 13, marginBottom: spacing.lg, marginTop: spacing.xs },
     error: { backgroundColor: colors.dangerSoft, borderRadius: radius.md, color: colors.danger, marginBottom: spacing.md, padding: spacing.md },
