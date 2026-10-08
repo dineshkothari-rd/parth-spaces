@@ -60,9 +60,9 @@ export function SignInScreen({ error, loading, onForgotPassword, onSignIn }: Sig
         <View style={styles.container}>
           <View style={styles.hero}>
             <View style={styles.mark}>
-              <Text style={styles.markText}>K</Text>
+              <Text style={styles.markText}>PS</Text>
             </View>
-            <Text style={styles.eyebrow}>Kothari</Text>
+            <Text style={styles.eyebrow}>Parth Spaces</Text>
             <Text style={styles.title}>{t('Welcome back')}</Text>
             <Text style={styles.subtitle}>{t('Sign in to manage your stay, membership, rooms, and payments.')}</Text>
           </View>

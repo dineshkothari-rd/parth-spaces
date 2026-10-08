@@ -202,7 +202,7 @@ export type SupportRequestRecord = FirestoreRecord & {
   message?: string;
   response?: string;
   status?: 'in_progress' | 'open' | 'resolved';
-  type?: 'issue' | 'profile_correction';
+  type?: 'issue' | 'profile_correction' | 'payment_confirmation' | 'renewal';
   updatedAt?: { seconds?: number; toDate?: () => Date };
   updatedBy?: string;
 };
@@ -303,4 +303,23 @@ export interface AgreementRecord extends FirestoreRecord {
   acceptedBy?: string;
   acceptanceName?: string;
   createdAt?: { seconds?: number };
+}
+
+export interface WorkItem extends FirestoreRecord {
+  kind: 'maintenance' | 'housekeeping' | 'follow_up' | 'reminder';
+  title: string;
+  dueDate: string;
+  allocation: string;
+  customerId: string;
+  customerName: string;
+  supportRequestId: string;
+  assignedTo: string;
+  assignedName: string;
+  status: 'open' | 'in_progress' | 'done';
+  outcome: string;
+  revision: number;
+  createdAt?: { seconds?: number };
+  createdBy: string;
+  updatedAt?: { seconds?: number };
+  updatedBy: string;
 }

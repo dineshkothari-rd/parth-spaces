@@ -47,29 +47,30 @@ export function getDayKey(date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
-function readDateValue(record: Record<string, unknown>, fields: string[]) {
+export function getRecordDay(record: Record<string, unknown>, fields: string[]) {
   for (const field of fields) {
     const value = record[field];
-
     if (!value) continue;
-
-    if (typeof value === 'string') return value;
-
-    if (value instanceof Date) return getDayKey(value);
-
-    if (typeof value === 'object') {
+    if (typeof value === 'string') {
+      const indian = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value.trim());
+      const day = indian ? `${indian[3]}-${indian[2].padStart(2, '0')}-${indian[1].padStart(2, '0')}` : value.slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+      const date = new Date(`${day}T12:00:00`);
+      if (Number.isFinite(date.getTime()) && getDayKey(date) === day) return day;
+    } else if (value instanceof Date && Number.isFinite(value.getTime())) return getDayKey(value);
+    else if (typeof value === 'object') {
       if ('toDate' in value && typeof value.toDate === 'function') {
-        return getDayKey(value.toDate());
-      }
-
-      if ('seconds' in value && typeof value.seconds === 'number') {
-        return getDayKey(new Date(value.seconds * 1000));
+        const date = value.toDate();
+        if (date instanceof Date && Number.isFinite(date.getTime())) return getDayKey(date);
+      } else if ('seconds' in value && typeof value.seconds === 'number') {
+        const date = new Date(value.seconds * 1000);
+        if (Number.isFinite(date.getTime())) return getDayKey(date);
       }
     }
   }
-
   return '';
 }
+const readDateValue = getRecordDay;
 
 export function matchesDay(record: Record<string, unknown>, day: string, fields: string[]) {
   return readDateValue(record, fields).slice(0, 10) === day;
@@ -265,7 +266,7 @@ export function calculateMonthlyDues(
     return map;
   }, {});
   return tenants
-    .filter((tenant) => isTenantActiveForMonth(tenant, month))
+    .filter((tenant) => isTenantActiveForMonth(tenant, month) || invoices.some((invoice) => invoice.tenantId === tenant.id && invoice.month === month))
     .map((tenant) => {
       const invoice = invoices.find((item) => item.tenantId === tenant.id && item.month === month);
       const baseAmount = invoice ? toNumber(invoice.baseAmount) : (tenant.membershipManaged && month >= String(tenant.membershipStart || '').slice(0, 7) ? 0 : toNumber(tenant.rent));
@@ -361,7 +362,7 @@ export function calculateSettlement({
   };
 }
 
-function csvCell(value: unknown) {
+export function csvCell(value: unknown) {
   const text = String(value ?? '');
   return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }

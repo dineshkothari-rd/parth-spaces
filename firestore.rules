@@ -114,6 +114,7 @@ service cloud.firestore {
 
     function customerActivatingTenant(tenantId) {
       return customer()
+        && request.auth.token.email_verified == true
         && tenantId == customerId()
         && resource.data.get('accessStatus', 'invited') == 'invited'
         && request.resource.data.accessStatus == 'active'

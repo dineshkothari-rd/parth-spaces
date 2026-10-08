@@ -365,3 +365,22 @@ test('checkout atomically applies the recorded deposit and reserves any refund',
   await assertFails(updateDoc(doc(db, 'settlements', 'tenant-3'), { refundStatus: 'Paid', refundedAt: serverTimestamp(), refundedBy: 'staff-1', refundMode: 'Bank', refundReference: '' }));
   await assertSucceeds(updateDoc(doc(db, 'settlements', 'tenant-3'), { refundStatus: 'Paid', refundedAt: serverTimestamp(), refundedBy: 'staff-1', refundMode: 'Bank', refundReference: 'UTR-123' }));
 });
+
+test('unverified customer cannot activate tenant access even when their profile is already active', async () => {
+  await seed();
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'tenants', 'tenant-1'), { accessStatus: 'invited' });
+  });
+  const changes = { accessStatus: 'active', activatedAt: serverTimestamp(), updatedAt: serverTimestamp() };
+  await assertFails(updateDoc(doc(signedIn('customer-1', 'customer', { email_verified: false }), 'tenants', 'tenant-1'), changes));
+  await assertSucceeds(updateDoc(doc(signedIn('customer-1', 'customer'), 'tenants', 'tenant-1'), changes));
+});
+
+test('unknown accounts cannot use claimed roles to read records or create their own approval', async () => {
+  await seed();
+  for (const role of ['admin', 'staff', 'customer']) {
+    const db = signedIn('unapproved', role, { customerId: 'tenant-1' });
+    await assertFails(getDoc(doc(db, 'tenants', 'tenant-1')));
+    await assertFails(setDoc(doc(db, 'users', 'unapproved'), { accessStatus: 'active', role: 'admin' }));
+  }
+});

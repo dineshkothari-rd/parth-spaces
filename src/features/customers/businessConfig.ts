@@ -8,7 +8,7 @@ export const ROOM_COUNT = positiveInteger(process.env.EXPO_PUBLIC_ROOM_COUNT, 14
 export const PG_ROOM_CAPACITY = positiveInteger(process.env.EXPO_PUBLIC_PG_ROOM_CAPACITY, 2, 20);
 
 export const defaultBusinessSettings = {
-  name: 'Kothari',
+  name: 'Your business',
   address: '',
   phone: '',
   upiId: '',
@@ -48,4 +48,10 @@ export function getRoomNumbers(settings = defaultBusinessSettings) {
 
 export function getSeatNumbers(settings = defaultBusinessSettings) {
   return Array.from({ length: settings.seatCount }, (_, index) => `${settings.seatPrefix}${String(index + 1).padStart(2, '0')}`);
+}
+
+export function requireBusinessIdentity(business: Pick<BusinessSettings, 'name'>) {
+  if (!business.name.trim() || business.name.trim() === defaultBusinessSettings.name) {
+    throw new Error('Set your actual business name in Business settings before generating bills or receipts.');
+  }
 }

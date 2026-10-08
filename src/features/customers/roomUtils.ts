@@ -80,7 +80,7 @@ export function getStayCheckout(customer: TenantRecord) {
   return null;
 }
 
-function getStayStart(customer: TenantRecord) {
+export function getStayStart(customer: TenantRecord) {
   for (const startValue of [customer.moveInDate, customer.checkInDate, customer.checkedInAt]) {
     const parsed = parseStayDate(startValue, customer.moveInTime);
     if (parsed) return parsed;

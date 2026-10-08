@@ -44,7 +44,7 @@ import type { DueRecord, InvoiceRecord, MeterReadingRecord, PaymentRecord, Settl
 import { money, toNumber } from '../../shared/utils/money';
 import { ExpenseDesk } from './ExpenseDesk';
 import { useLanguage } from '../../shared/i18n/LanguageProvider';
-import { defaultBusinessSettings, type BusinessSettings } from '../customers/businessConfig';
+import { defaultBusinessSettings, requireBusinessIdentity, type BusinessSettings } from '../customers/businessConfig';
 import { useBusinessSettings } from '../settings/BusinessSettingsProvider';
 
 type MoneyView = 'dues' | 'collections' | 'expenses';
@@ -227,7 +227,7 @@ function getDocumentFileName(title: string, customerName: string, period: string
     .replace(/^-+|-+$/g, '')
     .toLowerCase();
 
-  return `kothari-${cleanName}.pdf`;
+  return `parth-spaces-${cleanName}.pdf`;
 }
 
 function buildDocumentHtml({
@@ -268,6 +268,7 @@ function buildDocumentHtml({
   title: string;
   total: string;
 }) {
+  requireBusinessIdentity(business);
   return `
     <!doctype html>
     <html>
@@ -409,6 +410,17 @@ export function buildReceiptHtml(payment: PaymentRecord, tenants: TenantRecord[]
     title,
     total: money(payment.totalRent),
   });
+}
+
+export async function shareCsv({ fileName, csv, title }: { fileName: string; csv: string; title: string }) {
+  if (!(await Sharing.isAvailableAsync()) || Platform.OS === 'web') {
+    throw new Error('CSV sharing requires a supported Android or iOS device.');
+  }
+  const report = new File(Paths.cache, fileName);
+  if (report.exists) report.delete();
+  report.create();
+  report.write(csv);
+  await Sharing.shareAsync(report.uri, { dialogTitle: title, mimeType: 'text/csv' });
 }
 
 export async function downloadPdf({ fileName, html, title }: { fileName: string; html: string; title: string }) {
@@ -583,12 +595,7 @@ export function MoneyScreen() {
     setActionError('');
 
     try {
-      if (!(await Sharing.isAvailableAsync())) throw new Error(t('Sharing is not available on this device.'));
-      const report = new File(Paths.cache, `kothari-dues-${month}.csv`);
-      if (report.exists) report.delete();
-      report.create();
-      report.write(buildDuesCsv(dues));
-      await Sharing.shareAsync(report.uri, { dialogTitle: t('Export monthly report'), mimeType: 'text/csv' });
+      await shareCsv({ fileName: `parth-spaces-dues-${month}.csv`, csv: buildDuesCsv(dues), title: t('Export monthly report') });
     } catch (exportError) {
       setActionError(exportError instanceof Error ? exportError.message : t('Could not export report.'));
     } finally {

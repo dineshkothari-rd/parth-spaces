@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "kothari-mobile",
+    "name": "Parth Spaces",
     "slug": "kothari-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -18,9 +18,9 @@
       [
         "expo-image-picker",
         {
-          "cameraPermission": "Allow Kothari to photograph meter readings during check-in and check-out.",
+          "cameraPermission": "Allow Parth Spaces to photograph meter readings during check-in and check-out.",
           "microphonePermission": false,
-          "photosPermission": "Allow Kothari to attach customer and meter photos."
+          "photosPermission": "Allow Parth Spaces to attach customer and meter photos."
         }
       ],
       "expo-sharing"

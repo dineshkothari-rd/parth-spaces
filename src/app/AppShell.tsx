@@ -128,7 +128,7 @@ function AnimatedSplash({ onFinish, ready }: { onFinish: () => void; ready: bool
           transform: [{ translateY: copy.interpolate({ inputRange: [0, 1], outputRange: [14, 0] }) }],
         }}
       >
-        <Text style={splashStyles.eyebrow}>KOTHARI</Text>
+        <Text style={splashStyles.eyebrow}>LOGICSTEAD SPACES</Text>
         <Text style={splashStyles.title}>Your spaces, made simple.</Text>
         <Text style={splashStyles.subtitle}>PG · HOTEL · LIBRARY</Text>
       </Animated.View>
